@@ -4,14 +4,18 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 authors = ["Kevin Chen <chen.kevin.f@gmail.com>"]
-# description = "TODO"
+description = "A Bevy plugin that provides visualization for the auto directional navigation system in Bevy's UI Framework ."
 repository = "https://github.com/kfc35/marsh_compass"
 readme = "README.md"
 keywords = ["gamedev", "bevy"]
 categories = ["game-development"]
 
 [dependencies]
-bevy = "0.18.0"
+bevy = { version = "0.18.0", default-features = false, features = [ 
+  "bevy_gizmos", "bevy_input_focus", "bevy_ui"]}
+
+[dev-dependencies]
+bevy = { version = "0.18.0", default-features = false, features = ["ui"]}
 
 # Enable a small amount of optimization in the dev profile.
 [profile.dev]

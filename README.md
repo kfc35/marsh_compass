@@ -1,5 +1,5 @@
-# marsh_compass
-I’m not going to put the cart before the horse, this will be updated afterwards
+# Marsh Compass
+A Bevy plugin that provides visualization for the auto directional navigation system in Bevy's UI Framework.
 
 # License
 This project is dual-licensed under
