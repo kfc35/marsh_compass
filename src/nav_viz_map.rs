@@ -1,3 +1,4 @@
+use bevy::ecs::entity::EntityHashMap;
 use bevy::input_focus::InputFocus;
 use bevy::input_focus::directional_navigation::{
     AutoNavigationConfig, DirectionalNavigationMap, FocusableArea, NavNeighbors,
@@ -6,23 +7,28 @@ use bevy::input_focus::directional_navigation::{
 use bevy::prelude::*;
 use bevy::ui::auto_directional_navigation::AutoDirectionalNavigation;
 
-/// Resource used to cache the current auto navigation edges with overridden
-/// manual edges.
-///
-/// This is not to be confused with the [`DirectionalNavigationMap`] resource,
-/// which is a resource that contains only manually defined navigation edges.
-/// This resource wraps a separate instance of the [`DirectionalNavigationMap`]
-/// struct to take advantage of existing utilities.
-///
-/// This map contains the navigation edges that would be taken by the
-/// [`AutoDirectionalNavigator`](bevy::ui::auto_directional_navigation::AutoDirectionalNavigator)
-/// with overridden manual edges. This map is scoped to only include entities that are either:
-///
-/// - under the same camera as the current [`InputFocus`](bevy::input_focus::InputFocus) or
-///
-/// - manually defined in the existing [`DirectionalNavigationMap`] resource.
-#[derive(Resource, Default, Deref, DerefMut)]
-pub struct NavVizMap(DirectionalNavigationMap);
+/// Resource used to cache the complete navigation map: auto navigation edges combined
+/// with overridden manual edges. It also includes position and size data of each
+/// entity in a separate map for visualization purposes.
+#[derive(Resource, Default)]
+pub struct NavVizMap {
+    /// This map contains the navigation edges that would be taken by the
+    /// [`AutoDirectionalNavigator`](bevy::ui::auto_directional_navigation::AutoDirectionalNavigator)
+    /// with overridden manual edges. This map is scoped to only include entities that are either:
+    ///
+    /// - under the same camera as the current [`InputFocus`](bevy::input_focus::InputFocus) or
+    ///
+    /// - manually defined in the existing [`DirectionalNavigationMap`] resource.
+    ///
+    /// Despite it having the same type, this is not to be confused with the
+    /// [`DirectionalNavigationMap`] resource, which is a resource that contains only manually
+    /// defined navigation edges.
+    pub map: DirectionalNavigationMap,
+
+    /// A cache map that stores an entity's FocusableArea (position and size).
+    /// The information is used when drawing the navigation edges.
+    pub entity_viz_data: EntityHashMap<FocusableArea>,
+}
 
 /// A System that rebuilds the [`NavVizMap`] resource with the
 /// [`AutoDirectionalNavigation`] entities that share the camera with the current [`InputFocus`]
@@ -69,16 +75,24 @@ pub fn rebuild_nav_viz_map(
     // Use the `auto_generate_navigation_edges` utility to generate the visualization
     // map. It will find the best candidate in each direction for each node in `focusable_areas`,
     // using the same configuration that it uses in the `AutoDirectionalNavigator`.
-    nav_viz_map.clear();
-    auto_generate_navigation_edges(&mut nav_viz_map, &focusable_areas, &config);
+    nav_viz_map.map.clear();
+    auto_generate_navigation_edges(&mut nav_viz_map.map, &focusable_areas, &config);
 
     for (entity, neighbors) in manual_edge_map.neighbors.iter() {
-        add_overrides_to_nav_viz_map(&mut nav_viz_map, entity, neighbors);
+        add_overrides_to_nav_viz_map(&mut nav_viz_map.map, entity, neighbors);
+    }
+
+    // Add position and size data to the nav_viz_map
+    nav_viz_map.entity_viz_data.clear();
+    for focusable_area in focusable_areas {
+        nav_viz_map
+            .entity_viz_data
+            .insert(focusable_area.entity, focusable_area);
     }
 }
 
 fn add_overrides_to_nav_viz_map(
-    nav_viz_map: &mut ResMut<NavVizMap>,
+    nav_viz_map: &mut DirectionalNavigationMap,
     entity: &Entity,
     override_neighbors: &NavNeighbors,
 ) {
@@ -195,4 +209,14 @@ fn get_rotated_bounds(size: Vec2, rotation: f32) -> Vec2 {
         size.x * cos_r + size.y * sin_r,
         size.x * sin_r + size.y * cos_r,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_works() {
+        assert_eq!(2 + 2, 4);
+    }
 }

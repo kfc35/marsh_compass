@@ -3,9 +3,8 @@
 //! system in Bevy's UI Framework - `bevy_ui`.
 //!
 
-use bevy::input_focus::directional_navigation::FocusableArea;
+use bevy::gizmos::config::GizmoConfigGroup;
 use bevy::prelude::*;
-use bevy::ui::auto_directional_navigation::{AutoDirectionalNavigation, AutoDirectionalNavigator};
 
 mod nav_viz_map;
 pub use nav_viz_map::*;
@@ -33,16 +32,56 @@ pub enum AutoNavVizMode {
     EnabledForAll,
 }
 
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct AutoNavVizSystems;
+
 impl Plugin for AutoNavVizPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<NavVizMap>();
+        app.init_resource::<NavVizMap>()
+            .init_gizmo_group::<AutoNavVizGizmoConfigGroup>()
+            .add_systems(
+                PostUpdate,
+                (rebuild_nav_viz_map, draw_viz_for_current_focus)
+                    .chain()
+                    .after(TransformSystems::Propagate)
+                    .in_set(AutoNavVizSystems),
+            );
     }
 }
 
-fn draw_viz_for_current_focus(mut gizmos: Gizmos, mut navigator: AutoDirectionalNavigator) {
-    let Some(focus) = navigator.input_focus() else {
-        return;
-    };
+#[derive(Default, Reflect, GizmoConfigGroup)]
+#[reflect(Default)]
+pub struct AutoNavVizGizmoConfigGroup;
+
+fn draw_viz_for_current_focus(
+    mut gizmos: Gizmos<AutoNavVizGizmoConfigGroup>,
+    nav_viz_map: Res<NavVizMap>,
+) {
+    for (entity, neighbors) in nav_viz_map.map.neighbors.iter() {
+        for (_i, maybe_neighbor) in neighbors.neighbors.iter().enumerate() {
+            let Some(neighbor) = maybe_neighbor else {
+                continue;
+            };
+
+            let Some((entity_pos, _entity_size)) = nav_viz_map
+                .entity_viz_data
+                .get(entity)
+                .map(|fa| (fa.position, fa.size))
+            else {
+                continue;
+            };
+
+            let Some((neighbor_pos, _neighbor_size)) = nav_viz_map
+                .entity_viz_data
+                .get(neighbor)
+                .map(|fa| (fa.position, fa.size))
+            else {
+                continue;
+            };
+
+            gizmos.arrow_2d(entity_pos, neighbor_pos, Color::Srgba(Srgba::GREEN));
+        }
+    }
 }
 
 #[cfg(test)]
