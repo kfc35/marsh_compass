@@ -1,4 +1,8 @@
-use bevy::input_focus::directional_navigation::{DirectionalNavigationMap, FocusableArea};
+use bevy::input_focus::InputFocus;
+use bevy::input_focus::directional_navigation::{
+    AutoNavigationConfig, DirectionalNavigationMap, FocusableArea, NavNeighbors,
+    auto_generate_navigation_edges,
+};
 use bevy::prelude::*;
 use bevy::ui::auto_directional_navigation::AutoDirectionalNavigation;
 
@@ -20,22 +24,79 @@ use bevy::ui::auto_directional_navigation::AutoDirectionalNavigation;
 #[derive(Resource, Default, Deref, DerefMut)]
 pub struct NavVizMap(DirectionalNavigationMap);
 
-// We also need a resource that maps Entities to directions and points on the UI so that gizmos can be drawn.
+/// A System that rebuilds the [`NavVizMap`] resource with the
+/// [`AutoDirectionalNavigation`] entities that share the camera with the current [`InputFocus`]
+/// and any manual edges defined in the [`DirectionalNavigationMap`] resource.
+pub fn rebuild_nav_viz_map(
+    mut nav_viz_map: ResMut<NavVizMap>,
+    manual_edge_map: Res<DirectionalNavigationMap>,
+    current_focus: Res<InputFocus>,
+    config: Res<AutoNavigationConfig>,
+    navigable_entities_query: Query<
+        (
+            Entity,
+            &'static ComputedUiTargetCamera,
+            &'static ComputedNode,
+            &'static UiGlobalTransform,
+            &'static InheritedVisibility,
+        ),
+        With<AutoDirectionalNavigation>,
+    >,
+    camera_and_focusable_area_query: Query<
+        (
+            Entity,
+            &'static ComputedUiTargetCamera,
+            &'static ComputedNode,
+            &'static UiGlobalTransform,
+        ),
+        With<AutoDirectionalNavigation>,
+    >,
+) {
+    // Get the focusable areas related to the current focus and the entities
+    // it shares the camera with. This is what the `AutoDirectionalNavigator`
+    // does under the hood
+    let Some(focus) = current_focus.get() else {
+        return;
+    };
+    let Some((camera, current_focusable_area)) =
+        entity_to_camera_and_focusable_area(focus, camera_and_focusable_area_query)
+    else {
+        return;
+    };
+    let mut focusable_areas = get_navigable_nodes(camera, navigable_entities_query);
+    focusable_areas.push(current_focusable_area);
 
-impl NavVizMap {
-    /// Rebuilds the navigation visualization map.
-    pub fn rebuild(&mut self) {
-        self.clear();
+    // Use the `auto_generate_navigation_edges` utility to generate the visualization
+    // map. It will find the best candidate in each direction for each node in `focusable_areas`,
+    // using the same configuration that it uses in the `AutoDirectionalNavigator`.
+    nav_viz_map.clear();
+    auto_generate_navigation_edges(&mut nav_viz_map, &focusable_areas, &config);
 
-        // Only rebuild the map around the current input focus.
+    for (entity, neighbors) in manual_edge_map.neighbors.iter() {
+        add_overrides_to_nav_viz_map(&mut nav_viz_map, entity, neighbors);
     }
 }
 
-/// The three functions below this comment,
-/// [get_navigable_nodes], [entity_to_camera_and_focusable_area], and [get_rotated_bounds]
-/// were taken from the Bevy codebase for ease of use since they are currently private there.
-/// Todo: Make a PR in Bevy to make these pub and maybe put them in an easily accessible place
-/// outside of the SystemParam if it makes sense.
+fn add_overrides_to_nav_viz_map(
+    nav_viz_map: &mut ResMut<NavVizMap>,
+    entity: &Entity,
+    override_neighbors: &NavNeighbors,
+) {
+    if let Some(existing_nav_neighbors) = nav_viz_map.neighbors.get_mut(entity) {
+        for (i, maybe_neighbor_override) in override_neighbors.neighbors.iter().enumerate() {
+            if let Some(neighbor_override) = maybe_neighbor_override {
+                existing_nav_neighbors.neighbors[i] = Some(*neighbor_override);
+            }
+        }
+    }
+}
+
+// The three functions below this comment,
+// [get_navigable_nodes], [entity_to_camera_and_focusable_area], and [get_rotated_bounds]
+// were taken from the Bevy codebase for ease of use since they are currently private there.
+// They are used to fetch and convert UI nodes into `FocusableArea`s. They have not been modified.
+// Possible todo: Make a PR in Bevy to make these pub and maybe put them in an easily accessible place
+// outside of the SystemParam if it makes sense.
 
 /// Returns a vec of [`FocusableArea`] representing nodes that are eligible to be automatically navigated to.
 /// The camera of any navigable nodes will equal the desired `target_camera`.
