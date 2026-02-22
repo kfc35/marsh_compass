@@ -1,5 +1,6 @@
 use bevy::input_focus::{
-    InputDispatchPlugin, InputFocusVisible, directional_navigation::DirectionalNavigationPlugin,
+    InputDispatchPlugin, InputFocus, InputFocusVisible,
+    directional_navigation::DirectionalNavigationPlugin,
 };
 use bevy::prelude::*;
 use bevy::ui::auto_directional_navigation::AutoDirectionalNavigation;
@@ -18,7 +19,7 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: Commands) {
+fn setup(mut commands: Commands, mut input_focus: ResMut<InputFocus>) {
     commands.spawn(Camera2d);
     let root_id = commands
         .spawn((Node {
@@ -32,6 +33,9 @@ fn setup(mut commands: Commands) {
     for (left, top) in positions {
         let button = spawn_button(&mut commands, left, top);
         commands.entity(root_id).add_child(button);
+        if input_focus.get().is_none() {
+            input_focus.set(button);
+        }
     }
 }
 
@@ -52,7 +56,6 @@ fn spawn_button(commands: &mut Commands, left: i32, top: i32) -> Entity {
                 ..default()
             },
             BackgroundColor(Color::Srgba(Srgba::RED)),
-            // Just add this component for automatic navigation
             AutoDirectionalNavigation::default(),
         ))
         .with_child((

@@ -10,7 +10,7 @@ use bevy::prelude::*;
 mod nav_viz_map;
 pub use nav_viz_map::*;
 
-/// Adds visualizations for auto navigation systems.
+/// A [`Plugin`] that adds visualizations for auto navigation systems.
 #[derive(Default)]
 pub struct AutoNavVizPlugin;
 
@@ -69,7 +69,9 @@ pub struct AutoNavVizGizmoConfigGroup {
     pub drawing_mode: AutoNavVizMode,
 }
 
-fn draw_viz_for_current_focus(
+/// The system that draws the visualizations of the auto navigation
+/// system. It uses gizmos to draw arrows between entities.
+pub fn draw_viz_for_current_focus(
     mut gizmos: Gizmos<AutoNavVizGizmoConfigGroup>,
     nav_viz_map: Res<NavVizMap>,
     input_focus: Res<InputFocus>,
@@ -92,6 +94,7 @@ fn draw_viz_for_current_focus(
         }
         AutoNavVizMode::Disabled => vec![],
     };
+
     for (entity, neighbors) in entities_to_draw_nav.into_iter() {
         for (_i, maybe_neighbor) in neighbors.neighbors.iter().enumerate() {
             let Some(neighbor) = maybe_neighbor else {
@@ -114,7 +117,7 @@ fn draw_viz_for_current_focus(
                 continue;
             };
 
-            gizmos.arrow_2d(entity_pos, neighbor_pos, Color::Srgba(Srgba::GREEN));
+            gizmos.arrow_2d(entity_pos, neighbor_pos, Color::Srgba(Srgba::RED));
         }
     }
 }
