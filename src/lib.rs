@@ -5,6 +5,7 @@
 
 use bevy::gizmos::config::GizmoConfigGroup;
 use bevy::input_focus::{InputFocus, directional_navigation::NavNeighbors};
+use bevy::math::CompassOctant;
 use bevy::prelude::*;
 
 mod nav_viz_map;
@@ -96,31 +97,52 @@ pub fn draw_viz_for_current_focus(
     };
 
     for (entity, neighbors) in entities_to_draw_nav.into_iter() {
-        for (_i, maybe_neighbor) in neighbors.neighbors.iter().enumerate() {
+        for (i, maybe_neighbor) in neighbors.neighbors.iter().enumerate() {
             let Some(neighbor) = maybe_neighbor else {
                 continue;
             };
 
-            let Some((entity_pos, _entity_size)) = nav_viz_map
+            let Some((entity_pos, entity_size)) = nav_viz_map
                 .entity_viz_data
                 .get(entity)
                 .map(|fa| (fa.world_position, fa.size))
             else {
                 continue;
             };
-            // TODO use size to shift position
+            let Some(direction) = CompassOctant::from_index(i) else {
+                continue;
+            };
+            let shifted_entity_pos = shift_position(entity_pos, entity_size, direction);
 
-            let Some((neighbor_pos, _neighbor_size)) = nav_viz_map
+            let Some((neighbor_pos, neighbor_size)) = nav_viz_map
                 .entity_viz_data
                 .get(neighbor)
                 .map(|fa| (fa.world_position, fa.size))
             else {
                 continue;
             };
-            // TODO use size to shift position
+            let shifted_neighbor_pos =
+                shift_position(neighbor_pos, neighbor_size, direction.opposite());
 
-            gizmos.arrow_2d(entity_pos, neighbor_pos, Color::Srgba(Srgba::RED));
+            gizmos.arrow_2d(
+                shifted_entity_pos,
+                shifted_neighbor_pos,
+                Color::Srgba(Srgba::RED),
+            );
         }
+    }
+}
+
+fn shift_position(pos: Vec2, size: Vec2, dir: CompassOctant) -> Vec2 {
+    match dir {
+        CompassOctant::North => pos + Vec2::new(0., size.y / 2.),
+        CompassOctant::NorthEast => pos + (size / 2.),
+        CompassOctant::East => pos + Vec2::new(size.x / 2., 0.),
+        CompassOctant::SouthEast => pos + (Vec2::new(size.x, -size.y) / 2.),
+        CompassOctant::South => pos + Vec2::new(0., -size.y / 2.),
+        CompassOctant::SouthWest => pos - (size / 2.),
+        CompassOctant::West => pos + Vec2::new(-size.x / 2., 0.),
+        CompassOctant::NorthWest => pos + (Vec2::new(-size.x, size.y) / 2.),
     }
 }
 
