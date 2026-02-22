@@ -1,21 +1,21 @@
-use bevy::prelude::*;
 use bevy::input_focus::directional_navigation::{DirectionalNavigationMap, FocusableArea};
-use bevy::ui::auto_directional_navigation::{AutoDirectionalNavigation};
+use bevy::prelude::*;
+use bevy::ui::auto_directional_navigation::AutoDirectionalNavigation;
 
 /// Resource used to cache the current auto navigation edges with overridden
 /// manual edges.
-/// 
+///
 /// This is not to be confused with the [`DirectionalNavigationMap`] resource,
-/// which is a resource that contains only manually defined navigation edges. 
+/// which is a resource that contains only manually defined navigation edges.
 /// This resource wraps a separate instance of the [`DirectionalNavigationMap`]
 /// struct to take advantage of existing utilities.
-/// 
+///
 /// This map contains the navigation edges that would be taken by the
 /// [`AutoDirectionalNavigator`](bevy::ui::auto_directional_navigation::AutoDirectionalNavigator)
 /// with overridden manual edges. This map is scoped to only include entities that are either:
-/// 
+///
 /// - under the same camera as the current [`InputFocus`](bevy::input_focus::InputFocus) or
-/// 
+///
 /// - manually defined in the existing [`DirectionalNavigationMap`] resource.
 #[derive(Resource, Default, Deref, DerefMut)]
 pub struct NavVizMap(DirectionalNavigationMap);
@@ -23,33 +23,35 @@ pub struct NavVizMap(DirectionalNavigationMap);
 // We also need a resource that maps Entities to directions and points on the UI so that gizmos can be drawn.
 
 impl NavVizMap {
+    /// Rebuilds the navigation visualization map.
+    pub fn rebuild(&mut self) {
+        self.clear();
 
-  /// Rebuilds the navigation visualization map.
-  pub fn rebuild(&mut self) {
-    self.clear();
-
-    // Only rebuild the map around the current input focus.
-  }
+        // Only rebuild the map around the current input focus.
+    }
 }
 
 /// The three functions below this comment,
-/// [get_navigable_nodes], [entity_to_camera_and_focusable_area], and [get_rotated_bounds] 
+/// [get_navigable_nodes], [entity_to_camera_and_focusable_area], and [get_rotated_bounds]
 /// were taken from the Bevy codebase for ease of use since they are currently private there.
 /// Todo: Make a PR in Bevy to make these pub and maybe put them in an easily accessible place
 /// outside of the SystemParam if it makes sense.
 
 /// Returns a vec of [`FocusableArea`] representing nodes that are eligible to be automatically navigated to.
 /// The camera of any navigable nodes will equal the desired `target_camera`.
-fn get_navigable_nodes(target_camera: Entity, navigable_entities_query: Query<
-    (
-        Entity,
-        &'static ComputedUiTargetCamera,
-        &'static ComputedNode,
-        &'static UiGlobalTransform,
-        &'static InheritedVisibility,
-    ),
-    With<AutoDirectionalNavigation>,
->) -> Vec<FocusableArea> {
+fn get_navigable_nodes(
+    target_camera: Entity,
+    navigable_entities_query: Query<
+        (
+            Entity,
+            &'static ComputedUiTargetCamera,
+            &'static ComputedNode,
+            &'static UiGlobalTransform,
+            &'static InheritedVisibility,
+        ),
+        With<AutoDirectionalNavigation>,
+    >,
+) -> Vec<FocusableArea> {
     navigable_entities_query
         .iter()
         .filter_map(
@@ -86,14 +88,14 @@ fn get_navigable_nodes(target_camera: Entity, navigable_entities_query: Query<
 fn entity_to_camera_and_focusable_area(
     entity: Entity,
     camera_and_focusable_area_query: Query<
-    (
-        Entity,
-        &'static ComputedUiTargetCamera,
-        &'static ComputedNode,
-        &'static UiGlobalTransform,
-    ),
-    With<AutoDirectionalNavigation>,
->,
+        (
+            Entity,
+            &'static ComputedUiTargetCamera,
+            &'static ComputedNode,
+            &'static UiGlobalTransform,
+        ),
+        With<AutoDirectionalNavigation>,
+    >,
 ) -> Option<(Entity, FocusableArea)> {
     camera_and_focusable_area_query.get(entity).map_or(
         None,

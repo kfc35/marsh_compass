@@ -1,11 +1,11 @@
 //! # Marsh Compass
 //! A Bevy Plugin that provides visualization for the auto directional navigation
-//! system in Bevy's UI Framework - `bevy_ui`. 
-//! 
+//! system in Bevy's UI Framework - `bevy_ui`.
+//!
 
-use bevy::prelude::*;
 use bevy::input_focus::directional_navigation::FocusableArea;
-use bevy::ui::auto_directional_navigation::{AutoDirectionalNavigator, AutoDirectionalNavigation};
+use bevy::prelude::*;
+use bevy::ui::auto_directional_navigation::{AutoDirectionalNavigation, AutoDirectionalNavigator};
 
 mod nav_map;
 pub use nav_map::*;
@@ -14,21 +14,35 @@ pub use nav_map::*;
 #[derive(Default)]
 pub struct AutoNavVizPlugin;
 
+/// Settings Resource for navigation visualization
+#[derive(Resource, Default, Deref, DerefMut)]
+pub struct AutoNavVizSettings(AutoNavVizMode);
+
+/// Whether the navigation visualization should be:
+/// - disabled,
+/// - drawn for the current focus only, or
+/// - drawn for all entities
+/// 
+/// The "all entities" setting is restricted to entities rendered by the
+/// same camera as the current focus.
+#[derive(Clone, Default, Debug)]
+pub enum AutoNavVizMode {
+    Disabled,
+    #[default]
+    EnabledForCurrentFocus,
+    EnabledForAll
+}
+
 impl Plugin for AutoNavVizPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<NavVizMap>();
     }
 }
 
-fn draw_viz_for_current_focus(mut gizmos: Gizmos,
-    mut navigator: AutoDirectionalNavigator,
-
-) {
+fn draw_viz_for_current_focus(mut gizmos: Gizmos, mut navigator: AutoDirectionalNavigator) {
     let Some(focus) = navigator.input_focus() else {
         return;
     };
-
-    
 }
 
 #[cfg(test)]
