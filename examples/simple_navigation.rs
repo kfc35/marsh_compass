@@ -29,17 +29,22 @@ fn setup(mut commands: Commands, mut input_focus: ResMut<InputFocus>) {
         },))
         .id();
 
-    let positions = [(100, 100), (300, 100)];
-    for (left, top) in positions {
-        let button = spawn_button(&mut commands, left, top);
-        commands.entity(root_id).add_child(button);
-        if input_focus.get().is_none() {
-            input_focus.set(button);
+    let positions = [
+        [(100, 100), (300, 100), (500, 100)],
+        [(100, 300), (300, 300), (500, 300)],
+        [(100, 500), (300, 500), (500, 500)],];
+    for (i, row) in positions.iter().enumerate() {
+        for (j, (left, top)) in row.iter().enumerate() {
+            let button = spawn_button(&mut commands, *left, *top, i, j);
+            commands.entity(root_id).add_child(button);
+            if i == 1 && j == 1 {
+                input_focus.set(button);
+            }
         }
     }
 }
 
-fn spawn_button(commands: &mut Commands, left: i32, top: i32) -> Entity {
+fn spawn_button(commands: &mut Commands, left: i32, top: i32, i: usize, j: usize) -> Entity {
     commands
         .spawn((
             Button,
@@ -48,7 +53,7 @@ fn spawn_button(commands: &mut Commands, left: i32, top: i32) -> Entity {
                 left: px(left),
                 top: px(top),
                 width: px(100),
-                height: px(50),
+                height: px(100),
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
                 border: UiRect::all(px(5)),
@@ -59,7 +64,7 @@ fn spawn_button(commands: &mut Commands, left: i32, top: i32) -> Entity {
             AutoDirectionalNavigation::default(),
         ))
         .with_child((
-            Text::new("Hello"),
+            Text::new(format!("Button {}", i * 3 + j)),
             TextLayout {
                 justify: Justify::Center,
                 ..default()
