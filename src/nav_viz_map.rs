@@ -1,4 +1,5 @@
 use bevy::ecs::entity::EntityHashMap;
+use bevy::ecs::query::QueryEntityError;
 use bevy::input_focus::InputFocus;
 use bevy::input_focus::directional_navigation::{
     AutoNavigationConfig, DirectionalNavigationMap, FocusableArea, NavNeighbors,
@@ -27,7 +28,7 @@ pub struct NavVizMap {
 
     /// A cache map that stores an entity's FocusableArea (position and size).
     /// The information is used when drawing the navigation edges.
-    pub entity_viz_data: EntityHashMap<FocusableArea>,
+    pub entity_viz_data: EntityHashMap<NavVizData>,
 }
 
 /// A System that rebuilds the [`NavVizMap`] resource with the
@@ -57,11 +58,19 @@ pub fn rebuild_nav_viz_map(
         ),
         With<AutoDirectionalNavigation>,
     >,
+    viewport_logical_size_query: Query<
+        &'static ComputedUiRenderTargetInfo,
+        With<AutoDirectionalNavigation>,
+    >,
 ) {
     // Get the focusable areas related to the current focus and the entities
     // it shares the camera with. This is what the `AutoDirectionalNavigator`
     // does under the hood
     let Some(focus) = current_focus.get() else {
+        return;
+    };
+    // The viewport logical size is needed to figure out where to draw the viz.
+    let Ok(logical_size) = viewport_logical_size(focus, viewport_logical_size_query) else {
         return;
     };
     let Some((camera, current_focusable_area)) =
@@ -85,9 +94,10 @@ pub fn rebuild_nav_viz_map(
     // Add position and size data to the nav_viz_map
     nav_viz_map.entity_viz_data.clear();
     for focusable_area in focusable_areas {
-        nav_viz_map
-            .entity_viz_data
-            .insert(focusable_area.entity, focusable_area);
+        nav_viz_map.entity_viz_data.insert(
+            focusable_area.entity,
+            to_nav_viz_data(focusable_area, logical_size),
+        );
     }
 }
 
@@ -103,6 +113,49 @@ fn add_overrides_to_nav_viz_map(
             }
         }
     }
+}
+
+/// The position and size data needed to figure out what to draw in the window.
+pub struct NavVizData {
+    pub world_position: Vec2,
+    pub size: Vec2,
+}
+
+/// UI logical coordinates use a different coordinate system from the viz system (gizmos).
+/// UI coordinates are oriented with the origin at the top left of the window.
+/// X-coordinates increase rightward and Y-coordinates increase downward.
+/// Gizmos, on the other hand, require a coordinate where
+/// the center of the window is (0, 0), commonly known as world-space coordinates.
+/// This function converts a UI logical coordinate position to its
+/// equivalent in 2d world-space coordinates.
+pub fn ui_to_viz_position(ui_logical_coords: Vec2, viewport_logical_size: Vec2) -> Vec2 {
+    let viewport_origin = viewport_logical_size / Vec2::splat(2.);
+    Vec2::new(
+        ui_logical_coords.x - viewport_origin.x,
+        viewport_origin.y - ui_logical_coords.y,
+    )
+}
+
+/// Converts a [`FocusableArea`] into a [`NavVizData`]
+fn to_nav_viz_data(focusable_area: FocusableArea, viewport_logical_size: Vec2) -> NavVizData {
+    NavVizData {
+        world_position: ui_to_viz_position(focusable_area.position, viewport_logical_size),
+        size: focusable_area.size,
+    }
+}
+
+/// Get the render target's viewport size in logical pixels.
+/// This is used to convert from UI logical coordinates to world coordinates.
+fn viewport_logical_size(
+    entity: Entity,
+    viewport_logical_size_query: Query<
+        &'static ComputedUiRenderTargetInfo,
+        With<AutoDirectionalNavigation>,
+    >,
+) -> Result<Vec2, QueryEntityError> {
+    viewport_logical_size_query
+        .get(entity)
+        .map(|render_target_info| render_target_info.logical_size())
 }
 
 // The three functions below this comment,

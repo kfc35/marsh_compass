@@ -104,18 +104,20 @@ pub fn draw_viz_for_current_focus(
             let Some((entity_pos, _entity_size)) = nav_viz_map
                 .entity_viz_data
                 .get(entity)
-                .map(|fa| (fa.position, fa.size))
+                .map(|fa| (fa.world_position, fa.size))
             else {
                 continue;
             };
+            // TODO use size to shift position
 
             let Some((neighbor_pos, _neighbor_size)) = nav_viz_map
                 .entity_viz_data
                 .get(neighbor)
-                .map(|fa| (fa.position, fa.size))
+                .map(|fa| (fa.world_position, fa.size))
             else {
                 continue;
             };
+            // TODO use size to shift position
 
             gizmos.arrow_2d(entity_pos, neighbor_pos, Color::Srgba(Srgba::RED));
         }
