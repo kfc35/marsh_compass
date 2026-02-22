@@ -7,8 +7,8 @@ use bevy::input_focus::directional_navigation::FocusableArea;
 use bevy::prelude::*;
 use bevy::ui::auto_directional_navigation::{AutoDirectionalNavigation, AutoDirectionalNavigator};
 
-mod nav_map;
-pub use nav_map::*;
+mod nav_viz_map;
+pub use nav_viz_map::*;
 
 /// Adds visualizations for auto navigation systems.
 #[derive(Default)]
@@ -21,16 +21,16 @@ pub struct AutoNavVizSettings(AutoNavVizMode);
 /// Whether the navigation visualization should be:
 /// - disabled,
 /// - drawn for the current focus only, or
-/// - drawn for all entities
-/// 
-/// The "all entities" setting is restricted to entities rendered by the
+/// - drawn for all [`AutoDirectionalNavigation`] entities
+///
+/// The "all entities" setting is restricted to entities rendered to the
 /// same camera as the current focus.
 #[derive(Clone, Default, Debug)]
 pub enum AutoNavVizMode {
     Disabled,
     #[default]
     EnabledForCurrentFocus,
-    EnabledForAll
+    EnabledForAll,
 }
 
 impl Plugin for AutoNavVizPlugin {
