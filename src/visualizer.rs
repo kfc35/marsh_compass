@@ -30,6 +30,13 @@ pub fn draw_nav_viz(
             .collect::<Vec<(&Entity, &NavNeighbors)>>(),
     };
 
+    // Right now, this loop is double drawing symmetric edges instead of utilizing
+    // double headed arrows.
+    // Unfortunately, when trying to implement double headed arrows, interpolating
+    // colors of opposite directions mix to become gray with their default values.
+    // The default values were picked to be opposites on the color wheel after all.
+    // If we want to have a double headed arrow, we should allow a way to gradient
+    // the color of the double headed arrow for gizmos so it still looks pretty.
     for (entity, neighbors) in entries_to_draw_nav.into_iter() {
         let entity_color = Oklcha::sequential_dispersed(entity.index_u32()).into();
         for (i, maybe_neighbor) in neighbors.neighbors.iter().enumerate() {
