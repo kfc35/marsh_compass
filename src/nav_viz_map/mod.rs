@@ -11,8 +11,8 @@ mod nav_map;
 mod navigable_nodes;
 
 /// Resource used to cache the complete navigation map: auto navigation edges combined
-/// with overridden manual edges. It also includes position and size data of each
-/// entity in a separate map for visualization purposes.
+/// with overridden manual edges. It also includes world-coordinate position and size
+/// data of each entity in a separate map for visualization purposes.
 #[derive(Resource, Default)]
 pub struct NavVizMap {
     /// This map contains the navigation edges that would be taken by the
