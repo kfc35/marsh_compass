@@ -13,7 +13,7 @@ pub fn draw_nav_viz(
     mut gizmos: Gizmos<AutoNavVizGizmoConfigGroup>,
 ) {
     let config = config_store.config::<AutoNavVizGizmoConfigGroup>().1;
-    let entities_to_draw_nav = match config.drawing_mode {
+    let entries_to_draw_nav = match config.drawing_mode {
         AutoNavVizDrawMode::EnabledForCurrentFocus => {
             if let Some(entity) = &input_focus.0
                 && let Some(neighbors) = nav_viz_map.map.get_neighbors(*entity)
@@ -30,13 +30,12 @@ pub fn draw_nav_viz(
             .collect::<Vec<(&Entity, &NavNeighbors)>>(),
     };
 
-    for (entity, neighbors) in entities_to_draw_nav.into_iter() {
+    for (entity, neighbors) in entries_to_draw_nav.into_iter() {
         let entity_color = Oklcha::sequential_dispersed(entity.index_u32()).into();
         for (i, maybe_neighbor) in neighbors.neighbors.iter().enumerate() {
             let Some(neighbor) = maybe_neighbor else {
                 continue;
             };
-
             let Some((from_pos, from_size)) = nav_viz_map
                 .entity_viz_data
                 .get(entity)
@@ -54,6 +53,7 @@ pub fn draw_nav_viz(
             else {
                 continue;
             };
+
             let (start, end) = get_arrow_endpoints(from_pos, from_size, dir, to_pos, to_size);
             let color = config
                 .get_color_for_direction(dir)
@@ -65,6 +65,7 @@ pub fn draw_nav_viz(
                     }
                 })
                 .unwrap_or(entity_color);
+
             gizmos.arrow_2d(start, end, color);
         }
     }
@@ -78,8 +79,32 @@ fn get_arrow_endpoints(
     to_size: Vec2,
 ) -> (Vec2, Vec2) {
     let start = get_position_in_direction(from_pos, from_size, dir);
-    let end = get_position_in_direction(to_pos, to_size, dir.opposite());
-    return (start, end);
+    let end = get_closest_point(to_pos, to_size, start);
+    (start, end)
+}
+
+/// Gets the point on the rectangle defined by its center `pos` and `size` that is
+/// closest in distance squared to `point`
+fn get_closest_point(pos: Vec2, size: Vec2, point: Vec2) -> Vec2 {
+    let mut closest_point = get_position_in_direction(pos, size, CompassOctant::North);
+    let mut squared_dist = closest_point.distance_squared(point);
+    for dir in [
+        CompassOctant::NorthEast,
+        CompassOctant::East,
+        CompassOctant::SouthEast,
+        CompassOctant::South,
+        CompassOctant::SouthWest,
+        CompassOctant::West,
+        CompassOctant::NorthWest,
+    ] {
+        let candidate = get_position_in_direction(pos, size, dir);
+        let candidate_dist = candidate.distance_squared(point);
+        if candidate_dist < squared_dist {
+            closest_point = candidate;
+            squared_dist = candidate_dist;
+        }
+    }
+    closest_point
 }
 
 /// Gets the point on the rectangle defined by its center `pos` and `size` that is in the direction of `dir`.
