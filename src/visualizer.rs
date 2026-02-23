@@ -61,7 +61,18 @@ pub fn draw_nav_viz(
                 continue;
             };
 
-            let (start, end) = get_arrow_endpoints(from_pos, from_size, dir, to_pos, to_size);
+            let is_symmetrical =
+                nav_viz_map.map.get_neighbor(*neighbor, dir.opposite()) == Some(*entity);
+
+            let (start, end) = get_arrow_endpoints(
+                from_pos,
+                from_size,
+                dir,
+                to_pos,
+                to_size,
+                is_symmetrical,
+                config,
+            );
             let color = config
                 .get_color_for_direction(dir)
                 .map(|color| {
@@ -84,9 +95,60 @@ fn get_arrow_endpoints(
     dir: CompassOctant,
     to_pos: Vec2,
     to_size: Vec2,
+    is_symmetrical: bool,
+    config: &AutoNavVizGizmoConfigGroup,
 ) -> (Vec2, Vec2) {
-    let start = get_position_in_direction(from_pos, from_size, dir);
-    let end = get_closest_point(to_pos, to_size, start);
+    let mut start = get_position_in_direction(from_pos, from_size, dir);
+    let mut end = get_closest_point(to_pos, to_size, start);
+    if is_symmetrical && config.drawing_mode == AutoNavVizDrawMode::EnabledForAll {
+        let nudge = config.symmetrical_edge_spacing / 2.;
+        match dir {
+            CompassOctant::North => {
+                // Nudge West
+                start -= Vec2::new(nudge, 0.);
+                end -= Vec2::new(nudge, 0.);
+            }
+            CompassOctant::South => {
+                // Nudge East
+                start += Vec2::new(nudge, 0.);
+                end += Vec2::new(nudge, 0.);
+            }
+            CompassOctant::East => {
+                // Nudge North
+                start += Vec2::new(0., nudge);
+                end += Vec2::new(0., nudge);
+            }
+            CompassOctant::West => {
+                // Nudge South
+                start -= Vec2::new(0., nudge);
+                end -= Vec2::new(0., nudge);
+            }
+            CompassOctant::NorthEast => {
+                // Nudge East
+                start -= Vec2::new(nudge, 0.);
+                // Nudge North
+                end += Vec2::new(0., nudge);
+            }
+            CompassOctant::SouthWest => {
+                // Nudge West
+                start += Vec2::new(nudge, 0.);
+                // Nudge South
+                end -= Vec2::new(0., nudge);
+            }
+            CompassOctant::NorthWest => {
+                // Nudge South
+                start -= Vec2::new(0., nudge);
+                // Nudge East
+                end -= Vec2::new(nudge, 0.);
+            }
+            CompassOctant::SouthEast => {
+                // Nudge North
+                start += Vec2::new(0., nudge);
+                // Nudge West
+                end += Vec2::new(nudge, 0.);
+            }
+        }
+    }
     (start, end)
 }
 

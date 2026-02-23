@@ -115,6 +115,12 @@ pub struct AutoNavVizGizmoConfigGroup {
     /// See [`AutoNavVizColorMode`] for more details.
     pub color_mode: AutoNavVizColorMode,
 
+    /// The amount of space (in world space) to render between arrows that would otherwise
+    /// overlap. This is mostly used when navigation edges are symmetrical, but can also be used
+    /// depending on how the visualization system calculates how best to place arrows to avoid
+    /// awkward or confusing placement.
+    pub symmetrical_edge_spacing: f32,
+
     /// A color representing one of the eight [`CompassOctant`] directions
     /// that the auto navigation system uses.
     ///
@@ -148,6 +154,7 @@ impl Default for AutoNavVizGizmoConfigGroup {
         Self {
             drawing_mode: Default::default(),
             color_mode: Default::default(),
+            symmetrical_edge_spacing: 10.,
             // Yellow
             north_color: Some(Color::Srgba(Srgba::new(1.0, 1.0, 0., 0.8))),
 
@@ -188,5 +195,18 @@ impl AutoNavVizGizmoConfigGroup {
             CompassOctant::West => self.west_color,
             CompassOctant::NorthWest => self.north_west_color,
         }
+    }
+
+    /// Sets all the directional colors to None. This means that the all colors
+    /// used for arrows will be unique to the source entity.
+    pub fn set_directional_colors_to_none(&mut self) {
+        self.north_color = None;
+        self.north_east_color = None;
+        self.east_color = None;
+        self.south_east_color = None;
+        self.south_color = None;
+        self.south_west_color = None;
+        self.west_color = None;
+        self.north_west_color = None;
     }
 }
