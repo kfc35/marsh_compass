@@ -97,17 +97,7 @@ pub fn rebuild_nav_viz_map(
     );
     viz_data::rebuild_entity_viz_data(
         &mut nav_viz_map.entity_viz_data,
-        focusable_areas,
+        &focusable_areas,
         logical_size,
     );
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
 }
