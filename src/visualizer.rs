@@ -2,23 +2,19 @@ use bevy::input_focus::{InputFocus, directional_navigation::NavNeighbors};
 use bevy::math::CompassOctant;
 use bevy::prelude::*;
 
-use crate::{AutoNavVizGizmoConfigGroup, AutoNavVizMode, NavVizMap};
+use crate::{AutoNavVizColorMode, AutoNavVizDrawMode, AutoNavVizGizmoConfigGroup, NavVizMap};
 
 /// The system that draws the visualizations of the auto navigation
 /// system. It uses gizmos to draw arrows between entities.
-pub fn draw_viz_for_current_focus(
-    mut gizmos: Gizmos<AutoNavVizGizmoConfigGroup>,
-    nav_viz_map: Res<NavVizMap>,
+pub fn draw_nav_viz(
+    config_store: Res<GizmoConfigStore>,
     input_focus: Res<InputFocus>,
-    config: Res<GizmoConfigStore>,
+    nav_viz_map: Res<NavVizMap>,
+    mut gizmos: Gizmos<AutoNavVizGizmoConfigGroup>,
 ) {
-    let entities_to_draw_nav = match config.config::<AutoNavVizGizmoConfigGroup>().1.drawing_mode {
-        AutoNavVizMode::EnabledForAll => nav_viz_map
-            .map
-            .neighbors
-            .iter()
-            .collect::<Vec<(&Entity, &NavNeighbors)>>(),
-        AutoNavVizMode::EnabledForCurrentFocus => {
+    let config = config_store.config::<AutoNavVizGizmoConfigGroup>().1;
+    let entities_to_draw_nav = match config.drawing_mode {
+        AutoNavVizDrawMode::EnabledForCurrentFocus => {
             if let Some(entity) = &input_focus.0
                 && let Some(neighbors) = nav_viz_map.map.get_neighbors(*entity)
             {
@@ -27,47 +23,67 @@ pub fn draw_viz_for_current_focus(
                 return;
             }
         }
-        AutoNavVizMode::Disabled => return,
+        AutoNavVizDrawMode::EnabledForAll => nav_viz_map
+            .map
+            .neighbors
+            .iter()
+            .collect::<Vec<(&Entity, &NavNeighbors)>>(),
     };
 
     for (entity, neighbors) in entities_to_draw_nav.into_iter() {
+        let entity_color = Oklcha::sequential_dispersed(entity.index_u32()).into();
         for (i, maybe_neighbor) in neighbors.neighbors.iter().enumerate() {
             let Some(neighbor) = maybe_neighbor else {
                 continue;
             };
 
-            let Some((entity_pos, entity_size)) = nav_viz_map
+            let Some((from_pos, from_size)) = nav_viz_map
                 .entity_viz_data
                 .get(entity)
                 .map(|fa| (fa.world_position, fa.size))
             else {
                 continue;
             };
-            let Some(direction) = CompassOctant::from_index(i) else {
+            let Some(dir) = CompassOctant::from_index(i) else {
                 continue;
             };
-            let shifted_entity_pos = shift_position(entity_pos, entity_size, direction);
-
-            let Some((neighbor_pos, neighbor_size)) = nav_viz_map
+            let Some((to_pos, to_size)) = nav_viz_map
                 .entity_viz_data
                 .get(neighbor)
                 .map(|fa| (fa.world_position, fa.size))
             else {
                 continue;
             };
-            let shifted_neighbor_pos =
-                shift_position(neighbor_pos, neighbor_size, direction.opposite());
-
-            gizmos.arrow_2d(
-                shifted_entity_pos,
-                shifted_neighbor_pos,
-                Color::Srgba(Srgba::RED),
-            );
+            let (start, end) = get_arrow_endpoints(from_pos, from_size, dir, to_pos, to_size);
+            let color = config
+                .get_color_for_direction(dir)
+                .map(|color| {
+                    if let AutoNavVizColorMode::MixWithEntity(factor) = config.color_mode {
+                        color.mix(&entity_color, factor)
+                    } else {
+                        color
+                    }
+                })
+                .unwrap_or(entity_color);
+            gizmos.arrow_2d(start, end, color);
         }
     }
 }
 
-fn shift_position(pos: Vec2, size: Vec2, dir: CompassOctant) -> Vec2 {
+fn get_arrow_endpoints(
+    from_pos: Vec2,
+    from_size: Vec2,
+    dir: CompassOctant,
+    to_pos: Vec2,
+    to_size: Vec2,
+) -> (Vec2, Vec2) {
+    let start = get_position_in_direction(from_pos, from_size, dir);
+    let end = get_position_in_direction(to_pos, to_size, dir.opposite());
+    return (start, end);
+}
+
+/// Gets the point on the rectangle defined by its center `pos` and `size` that is in the direction of `dir`.
+fn get_position_in_direction(pos: Vec2, size: Vec2, dir: CompassOctant) -> Vec2 {
     match dir {
         CompassOctant::North => pos + Vec2::new(0., size.y / 2.),
         CompassOctant::NorthEast => pos + (size / 2.),

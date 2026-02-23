@@ -1,6 +1,6 @@
 //! # Marsh Compass
-//! A Bevy Plugin that provides visualizations of the auto directional navigation
-//! system in Bevy's UI Framework - `bevy_ui`.
+//! A Bevy Plugin that draws a visualization of the auto directional navigation
+//! system in Bevy's UI Framework.
 //!
 //! # Usage
 //! Simply add the [`AutoNavVizPlugin`] plugin to your app that has auto
@@ -37,6 +37,7 @@
 //! ```
 
 use bevy::gizmos::config::GizmoConfigGroup;
+use bevy::math::CompassOctant;
 use bevy::prelude::*;
 
 mod nav_viz_map;
@@ -60,18 +61,7 @@ impl Plugin for AutoNavVizPlugin {
             .init_gizmo_group::<AutoNavVizGizmoConfigGroup>()
             .add_systems(
                 PostUpdate,
-                (
-                    nav_viz_map::rebuild_nav_viz_map,
-                    visualizer::draw_viz_for_current_focus.run_if(
-                        |config: Res<GizmoConfigStore>| {
-                            config
-                                .config::<AutoNavVizGizmoConfigGroup>()
-                                .1
-                                .drawing_mode
-                                .is_enabled()
-                        },
-                    ),
-                )
+                (nav_viz_map::rebuild_nav_viz_map, visualizer::draw_nav_viz)
                     .chain()
                     .after(TransformSystems::Propagate)
                     .in_set(AutoNavVizSystems),
@@ -80,30 +70,123 @@ impl Plugin for AutoNavVizPlugin {
 }
 
 /// Setting for whether the navigation visualization should be:
-/// - disabled,
 /// - drawn for the current focus only, or
 /// - drawn for all [`AutoDirectionalNavigation`](bevy::ui::auto_directional_navigation::AutoDirectionalNavigation)
 ///   entities rendered to the same target as the current focus.
+///
+/// The default is to draw for the current focus only.
 #[derive(Clone, Default, Debug, Reflect, PartialEq, Eq, Hash)]
-pub enum AutoNavVizMode {
-    Disabled,
+pub enum AutoNavVizDrawMode {
     #[default]
     EnabledForCurrentFocus,
     EnabledForAll,
 }
 
-impl AutoNavVizMode {
-    pub fn is_enabled(&self) -> bool {
-        *self != AutoNavVizMode::Disabled
-    }
+/// Setting for whether the directional colors provided by the [`AutoNavVizGizmoConfigGroup`]
+/// should:
+/// - be mixed with a random color generated uniquely for the source entity, or
+/// - not be mixed
+///
+/// The default is not to mix.
+#[derive(Clone, Debug, Default, Reflect, PartialEq)]
+pub enum AutoNavVizColorMode {
+    /// Mix the color with a random color generated uniquely for the source entity.
+    /// The f32 provided is the mixing factor and should be a number between 0.0 and 1.0.
+    /// A higher number means that the entity's color is used more.
+    MixWithEntity(f32),
+    #[default]
+    NoMix,
 }
 
 /// The [`GizmoConfigGroup`] for the auto navigation visualizations
 /// that will be drawn.
-#[derive(Default, Reflect, GizmoConfigGroup)]
-#[reflect(Default)]
+///
+/// As with other custom gizmo config groups, the standard settings to disable drawing,
+/// change line width, etc. can be updated via this gizmo's group's
+/// [`GizmoConfig`], accessible as the first item in the tuple returned by
+/// [`GizmoConfigStore::config<AutoNavVizGizmoConfigGroup>`].
+#[derive(Reflect, GizmoConfigGroup)]
 pub struct AutoNavVizGizmoConfigGroup {
-    /// The drawing mode for auto navigation visualizations.
-    /// See [`AutoNavVizMode`] for more details.
-    pub drawing_mode: AutoNavVizMode,
+    /// The drawing mode
+    /// See [`AutoNavVizDrawMode`] for more details.
+    pub drawing_mode: AutoNavVizDrawMode,
+
+    /// The coloring mode
+    /// See [`AutoNavVizColorMode`] for more details.
+    pub color_mode: AutoNavVizColorMode,
+
+    /// A color representing one of the eight [`CompassOctant`] directions
+    /// that the auto navigation system uses.
+    ///
+    /// If set to None, the random color generated uniquely for the source entity will be used only.
+    pub north_color: Option<Color>,
+
+    /// Refer to the description of [north_color](AutoNavVizGizmoConfigGroup::north_color).
+    pub north_east_color: Option<Color>,
+
+    /// Refer to the description of [north_color](AutoNavVizGizmoConfigGroup::north_color).
+    pub east_color: Option<Color>,
+
+    /// Refer to the description of [north_color](AutoNavVizGizmoConfigGroup::north_color).
+    pub south_east_color: Option<Color>,
+
+    /// Refer to the description of [north_color](AutoNavVizGizmoConfigGroup::north_color).
+    pub south_color: Option<Color>,
+
+    /// Refer to the description of [north_color](AutoNavVizGizmoConfigGroup::north_color).
+    pub south_west_color: Option<Color>,
+
+    /// Refer to the description of [north_color](AutoNavVizGizmoConfigGroup::north_color).
+    pub west_color: Option<Color>,
+
+    /// Refer to the description of [north_color](AutoNavVizGizmoConfigGroup::north_color).
+    pub north_west_color: Option<Color>,
+}
+
+impl Default for AutoNavVizGizmoConfigGroup {
+    fn default() -> Self {
+        Self {
+            drawing_mode: Default::default(),
+            color_mode: Default::default(),
+            // Yellow
+            north_color: Some(Color::Srgba(Srgba::new(1.0, 1.0, 0., 0.8))),
+
+            // Orange
+            north_east_color: Some(Color::Srgba(Srgba::new(1.0, 0.33, 0., 0.8))),
+
+            // Magenta
+            east_color: Some(Color::Srgba(Srgba::new(1.0, 0., 0.5, 0.8))),
+
+            // Purple
+            south_east_color: Some(Color::Srgba(Srgba::new(0.67, 0., 1.0, 0.8))),
+
+            // Blue
+            south_color: Some(Color::Srgba(Srgba::new(0., 0., 1., 0.8))),
+
+            // Cyan
+            south_west_color: Some(Color::Srgba(Srgba::new(0., 0.67, 1.0, 0.8))),
+
+            // Green
+            west_color: Some(Color::Srgba(Srgba::new(0., 1.0, 0.5, 0.8))),
+
+            // Light Green
+            north_west_color: Some(Color::Srgba(Srgba::new(0.33, 1.0, 0., 0.8))),
+        }
+    }
+}
+
+impl AutoNavVizGizmoConfigGroup {
+    /// Returns the color set in this config group for the given direction.
+    pub fn get_color_for_direction(&self, dir: CompassOctant) -> Option<Color> {
+        match dir {
+            CompassOctant::North => self.north_color,
+            CompassOctant::NorthEast => self.north_east_color,
+            CompassOctant::East => self.east_color,
+            CompassOctant::SouthEast => self.south_east_color,
+            CompassOctant::South => self.south_color,
+            CompassOctant::SouthWest => self.south_west_color,
+            CompassOctant::West => self.west_color,
+            CompassOctant::NorthWest => self.north_west_color,
+        }
+    }
 }

@@ -1,5 +1,5 @@
 # Marsh Compass
-A Bevy plugin that provides visualization of the auto directional navigation system in Bevy's UI Framework.
+A Bevy Plugin that draws a visualization of the auto directional navigation in Bevy's UI Framework.
 
 ## Usage
 Simply add the `AutoNavVizPlugin` plugin to your app that has auto
@@ -24,7 +24,7 @@ The plugin can be configured via its gizmo config group `AutoNavVizGizmoConfigGr
 ``` rust
 fn setup(config_store: ResMut<GizmoConfigStore>) {
     let mut config = config_store.config_mut::<AutoNavVizGizmoConfigGroup>().1;
-    config.drawing_mode = AutoNavVizMode::EnabledForAll;
+    config.drawing_mode = AutoNavVizDrawMode::EnabledForAll;
 }
 ```
 
