@@ -131,13 +131,13 @@ fn get_arrow_endpoints(
                 end -= Vec2::new(0., nudge);
             }
             CompassOctant::NorthEast => {
-                // Nudge East
+                // Nudge West
                 start -= Vec2::new(nudge, 0.);
                 // Nudge North
                 end += Vec2::new(0., nudge);
             }
             CompassOctant::SouthWest => {
-                // Nudge West
+                // Nudge East
                 start += Vec2::new(nudge, 0.);
                 // Nudge South
                 end -= Vec2::new(0., nudge);
@@ -145,13 +145,13 @@ fn get_arrow_endpoints(
             CompassOctant::NorthWest => {
                 // Nudge South
                 start -= Vec2::new(0., nudge);
-                // Nudge East
+                // Nudge West
                 end -= Vec2::new(nudge, 0.);
             }
             CompassOctant::SouthEast => {
                 // Nudge North
                 start += Vec2::new(0., nudge);
-                // Nudge West
+                // Nudge East
                 end += Vec2::new(nudge, 0.);
             }
         }
@@ -202,38 +202,100 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_arrow_endpoints_for_single_entity_in_dir_asymmetrical() {
+    fn test_arrow_endpoints_for_single_entity_in_dir() {
         let config = AutoNavVizGizmoConfigGroup::default();
         let from_pos = Vec2::new(0., 0.);
         let from_size = Vec2::new(10., 20.);
         let to_pos = Vec2::new(20., 0.);
         let to_size = Vec2::new(8., 12.);
 
+        // since we are only drawing for the current focus, the symmetrical
+        // aspect of the edge should not apply nudges.
+        for is_symmetrical in [true, false] {
+            let (start, end) = get_arrow_endpoints(
+                from_pos,
+                from_size,
+                CompassOctant::NorthEast,
+                to_pos,
+                to_size,
+                is_symmetrical,
+                &config,
+            );
+
+            assert_eq!(start, Vec2::new(5., 10.));
+            // to's NW Corner
+            assert_eq!(end, Vec2::new(16., 6.));
+
+            let (start, end) = get_arrow_endpoints(
+                from_pos,
+                from_size,
+                CompassOctant::East,
+                to_pos,
+                to_size,
+                is_symmetrical,
+                &config,
+            );
+
+            assert_eq!(start, Vec2::new(5., 0.));
+            // to's Western midpoint
+            assert_eq!(end, Vec2::new(16., 0.));
+
+            let (start, end) = get_arrow_endpoints(
+                from_pos,
+                from_size,
+                CompassOctant::SouthEast,
+                to_pos,
+                to_size,
+                is_symmetrical,
+                &config,
+            );
+
+            assert_eq!(start, Vec2::new(5., -10.));
+            // to's SW Corner
+            assert_eq!(end, Vec2::new(16., -6.));
+        }
+    }
+
+    #[test]
+    fn test_arrow_endpoints_for_draw_for_all_in_dir_symmetrical() {
+        let config = AutoNavVizGizmoConfigGroup {
+            symmetrical_edge_spacing: 2.,
+            drawing_mode: AutoNavVizDrawMode::EnabledForAll,
+            ..default()
+        };
+        let from_pos = Vec2::new(10., 0.);
+        let from_size = Vec2::new(5., 6.);
+        let to_pos = Vec2::new(12., -20.);
+        let to_size = Vec2::new(3., 9.);
+
         let (start, end) = get_arrow_endpoints(
             from_pos,
             from_size,
-            CompassOctant::East,
+            CompassOctant::SouthWest,
             to_pos,
             to_size,
-            false,
+            true,
             &config,
         );
-
-        assert_eq!(start, Vec2::new(5., 0.));
-        assert_eq!(end, Vec2::new(16., 0.));
+        // Nudged one unit east
+        assert_eq!(start, Vec2::new(7.5 + 1., -3.));
+        // Uses NW corner nudged one unit south
+        assert_eq!(end, Vec2::new(10.5, -15.5 - 1.));
 
         let (start, end) = get_arrow_endpoints(
             from_pos,
             from_size,
-            CompassOctant::NorthEast,
+            CompassOctant::South,
             to_pos,
             to_size,
-            false,
+            true,
             &config,
         );
-
-        assert_eq!(start, Vec2::new(5., 10.));
-        assert_eq!(end, Vec2::new(16., 6.));
+        // Southern point, Nudged one unit east
+        assert_eq!(start, Vec2::new(10. + 1., -3.));
+        // Uses NW Corner because it is closer
+        // Nudged one unit east
+        assert_eq!(end, Vec2::new(10.5 + 1., -15.5));
 
         let (start, end) = get_arrow_endpoints(
             from_pos,
@@ -241,11 +303,13 @@ mod tests {
             CompassOctant::SouthEast,
             to_pos,
             to_size,
-            false,
+            true,
             &config,
         );
-
-        assert_eq!(start, Vec2::new(5., -10.));
-        assert_eq!(end, Vec2::new(16., -6.));
+        // SE point, nudged one unit north
+        assert_eq!(start, Vec2::new(12.5, -3. + 1.));
+        // Uses the Northern point because it is closer
+        // Nudged one unit east
+        assert_eq!(end, Vec2::new(12. + 1., -15.5));
     }
 }
