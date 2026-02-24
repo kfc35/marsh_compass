@@ -58,6 +58,10 @@ pub fn draw_nav_viz(
                 .get(neighbor)
                 .map(|fa| (fa.world_position, fa.size))
             else {
+                // A future case to handle appropriately, perhaps with a white arrow
+                // to indicate that it goes elsewhere.
+                // A text gizmo could also be used here to indicate where it goes
+                // (available in Bevy 0.19)
                 continue;
             };
 
@@ -100,6 +104,9 @@ fn get_arrow_endpoints(
 ) -> (Vec2, Vec2) {
     let mut start = get_position_in_direction(from_pos, from_size, dir);
     let mut end = get_closest_point(to_pos, to_size, start);
+    // TODO handle the case when !dir.is_in_direction(start, end)
+    // This means that it is a wrapping end. Need to do some arcing
+
     if is_symmetrical && config.drawing_mode == AutoNavVizDrawMode::EnabledForAll {
         let nudge = config.symmetrical_edge_spacing / 2.;
         match dir {
@@ -195,7 +202,50 @@ mod tests {
     use super::*;
 
     #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
+    fn test_arrow_endpoints_for_single_entity_in_dir_asymmetrical() {
+        let config = AutoNavVizGizmoConfigGroup::default();
+        let from_pos = Vec2::new(0., 0.);
+        let from_size = Vec2::new(10., 20.);
+        let to_pos = Vec2::new(20., 0.);
+        let to_size = Vec2::new(8., 12.);
+
+        let (start, end) = get_arrow_endpoints(
+            from_pos,
+            from_size,
+            CompassOctant::East,
+            to_pos,
+            to_size,
+            false,
+            &config,
+        );
+
+        assert_eq!(start, Vec2::new(5., 0.));
+        assert_eq!(end, Vec2::new(16., 0.));
+
+        let (start, end) = get_arrow_endpoints(
+            from_pos,
+            from_size,
+            CompassOctant::NorthEast,
+            to_pos,
+            to_size,
+            false,
+            &config,
+        );
+
+        assert_eq!(start, Vec2::new(5., 10.));
+        assert_eq!(end, Vec2::new(16., 6.));
+
+        let (start, end) = get_arrow_endpoints(
+            from_pos,
+            from_size,
+            CompassOctant::SouthEast,
+            to_pos,
+            to_size,
+            false,
+            &config,
+        );
+
+        assert_eq!(start, Vec2::new(5., -10.));
+        assert_eq!(end, Vec2::new(16., -6.));
     }
 }
