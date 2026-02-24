@@ -22,7 +22,7 @@ fn main() {
 The plugin can be configured via its gizmo config group `AutoNavVizGizmoConfigGroup`.
 
 ``` rust
-fn setup(config_store: ResMut<GizmoConfigStore>) {
+fn setup(mut config_store: ResMut<GizmoConfigStore>) {
     let mut config = config_store.config_mut::<AutoNavVizGizmoConfigGroup>().1;
     config.drawing_mode = AutoNavVizDrawMode::EnabledForAll;
 }

@@ -12,7 +12,7 @@
 //! #   InputDispatchPlugin,
 //! #   directional_navigation::DirectionalNavigationPlugin
 //! # };
-//! # use crate::AutoNavVizPlugin;
+//! # use marsh_compass::AutoNavVizPlugin;
 //! fn main() {
 //!     App::new()
 //!         .add_plugins((
@@ -30,9 +30,10 @@
 //! ```
 //! # use bevy::gizmos::config::GizmoConfigGroup;
 //! # use bevy::prelude::*;
-//! fn setup(config_store: ResMut<GizmoConfigStore>) {
+//! # use marsh_compass::{AutoNavVizGizmoConfigGroup, AutoNavVizDrawMode};
+//! fn setup(mut config_store: ResMut<GizmoConfigStore>) {
 //!     let mut config = config_store.config_mut::<AutoNavVizGizmoConfigGroup>().1;
-//!     config.drawing_mode = AutoNavVizMode::EnabledForAll;
+//!     config.drawing_mode = AutoNavVizDrawMode::EnabledForAll;
 //! }
 //! ```
 
