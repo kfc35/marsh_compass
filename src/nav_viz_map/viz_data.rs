@@ -1,7 +1,7 @@
-use bevy::ecs::{entity::EntityHashMap, query::QueryEntityError};
+use bevy::camera::ViewportConversionError;
+use bevy::ecs::entity::EntityHashMap;
 use bevy::input_focus::directional_navigation::FocusableArea;
 use bevy::prelude::*;
-use bevy::ui::auto_directional_navigation::AutoDirectionalNavigation;
 
 /// The position and size data needed to determine where to draw a visualization
 /// element within the window.
@@ -18,54 +18,22 @@ pub struct NavVizData {
 pub(crate) fn rebuild_entity_viz_data(
     viz_data: &mut EntityHashMap<NavVizData>,
     auto_nav_ui_focusable_areas: &[FocusableArea],
-    viewport_logical_size: Vec2,
+    viewport_to_world_2d: &impl Fn(Vec2) -> Result<Vec2, ViewportConversionError>,
 ) {
     viz_data.clear();
     for focusable_area in auto_nav_ui_focusable_areas {
+        let Ok(world_position) = viewport_to_world_2d(focusable_area.position) else {
+            continue;
+        };
+
         viz_data.insert(
             focusable_area.entity,
-            to_nav_viz_data(focusable_area, viewport_logical_size),
+            NavVizData {
+                world_position,
+                size: focusable_area.size,
+            },
         );
     }
-}
-
-/// Get the render target's viewport size in logical pixels.
-///
-/// This value must be fetched in order to be able to convert UI logical
-/// coordinates to 2D world-space coordinates.
-pub(crate) fn viewport_logical_size(
-    entity: Entity,
-    viewport_logical_size_query: Query<
-        &'static ComputedUiRenderTargetInfo,
-        With<AutoDirectionalNavigation>,
-    >,
-) -> Result<Vec2, QueryEntityError> {
-    viewport_logical_size_query
-        .get(entity)
-        .map(|render_target_info| render_target_info.logical_size())
-}
-
-/// Converts a [`FocusableArea`] into a [`NavVizData`]
-fn to_nav_viz_data(focusable_area: &FocusableArea, viewport_logical_size: Vec2) -> NavVizData {
-    NavVizData {
-        world_position: ui_logical_to_world(focusable_area.position, viewport_logical_size),
-        size: focusable_area.size,
-    }
-}
-
-/// Converts UI logical coordinates to 2D world-space coordinates.
-///
-/// UI logical coordinates use a different coordinate system from the viz system (gizmos).
-/// UI coordinates are oriented with the origin at the top left of the window.
-/// X-coordinates increase rightward and Y-coordinates increase downward.
-/// Gizmos, on the other hand, require a coordinate where
-/// the center of the window is (0, 0), commonly known as world-space coordinates.
-fn ui_logical_to_world(ui_logical_coords: Vec2, viewport_logical_size: Vec2) -> Vec2 {
-    let viewport_origin = viewport_logical_size / Vec2::splat(2.);
-    Vec2::new(
-        ui_logical_coords.x - viewport_origin.x,
-        viewport_origin.y - ui_logical_coords.y,
-    )
 }
 
 #[cfg(test)]
@@ -105,23 +73,28 @@ mod tests {
                 size: Vec2::new(1., 100.),
             },
         ];
-        let viewport_logical_size = Vec2::new(1000., 2000.);
+
+        let viewport_to_world_2d = |viewport_position: Vec2| {
+            if viewport_position.x > 500. {
+                Err(ViewportConversionError::InvalidData)
+            } else {
+                Ok(Vec2::new(
+                    viewport_position.x - 500.,
+                    1000. - viewport_position.y,
+                ))
+            }
+        };
 
         rebuild_entity_viz_data(
             &mut entity_viz_data,
             &focusable_areas,
-            viewport_logical_size,
+            &viewport_to_world_2d,
         );
 
-        assert_eq!(entity_viz_data.len(), 3);
+        assert_eq!(entity_viz_data.len(), 2);
         let viz_data = entity_viz_data.get(&e1).unwrap();
         assert_eq!(viz_data.world_position, Vec2::new(-450., 900.));
         assert_eq!(viz_data.size, Vec2::new(25., 30.));
-        // Entity = 2
-        let viz_data = entity_viz_data.get(&e2).unwrap();
-        assert_eq!(viz_data.world_position, Vec2::new(75., -80.));
-        assert_eq!(viz_data.size, Vec2::new(2., 5.));
-        // Entity = 3
         let viz_data = entity_viz_data.get(&e3).unwrap();
         assert_eq!(viz_data.world_position, Vec2::new(0., 0.));
         assert_eq!(viz_data.size, Vec2::new(1., 100.));

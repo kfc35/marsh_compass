@@ -2,7 +2,8 @@
 // The three functions in this module,
 // [`get_navigable_nodes`], [`entity_to_camera_and_focusable_area`], and [`get_rotated_bounds`]
 // were taken from the Bevy codebase for ease of use since they are currently private there.
-// They are used to fetch and convert UI nodes into [`FocusableArea`]s. They have not been modified.
+// They are used to fetch and convert UI nodes into [`FocusableArea`]s. The lifetimes of the
+// query fields are the only things that were modified.
 // Possible todo: Make a PR in Bevy to make these pub and maybe put them in an easily accessible place
 // outside of the SystemParam if it makes sense.
 use bevy::input_focus::directional_navigation::FocusableArea;
@@ -16,10 +17,10 @@ pub(crate) fn get_navigable_nodes(
     navigable_entities_query: Query<
         (
             Entity,
-            &'static ComputedUiTargetCamera,
-            &'static ComputedNode,
-            &'static UiGlobalTransform,
-            &'static InheritedVisibility,
+            &ComputedUiTargetCamera,
+            &ComputedNode,
+            &UiGlobalTransform,
+            &InheritedVisibility,
         ),
         With<AutoDirectionalNavigation>,
     >,
@@ -62,9 +63,9 @@ pub(crate) fn entity_to_camera_and_focusable_area(
     camera_and_focusable_area_query: Query<
         (
             Entity,
-            &'static ComputedUiTargetCamera,
-            &'static ComputedNode,
-            &'static UiGlobalTransform,
+            &ComputedUiTargetCamera,
+            &ComputedNode,
+            &UiGlobalTransform,
         ),
         With<AutoDirectionalNavigation>,
     >,

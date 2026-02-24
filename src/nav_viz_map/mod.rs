@@ -45,26 +45,23 @@ pub fn rebuild_nav_viz_map(
     navigable_entities_query: Query<
         (
             Entity,
-            &'static ComputedUiTargetCamera,
-            &'static ComputedNode,
-            &'static UiGlobalTransform,
-            &'static InheritedVisibility,
+            &ComputedUiTargetCamera,
+            &ComputedNode,
+            &UiGlobalTransform,
+            &InheritedVisibility,
         ),
         With<AutoDirectionalNavigation>,
     >,
     camera_and_focusable_area_query: Query<
         (
             Entity,
-            &'static ComputedUiTargetCamera,
-            &'static ComputedNode,
-            &'static UiGlobalTransform,
+            &ComputedUiTargetCamera,
+            &ComputedNode,
+            &UiGlobalTransform,
         ),
         With<AutoDirectionalNavigation>,
     >,
-    viewport_logical_size_query: Query<
-        &'static ComputedUiRenderTargetInfo,
-        With<AutoDirectionalNavigation>,
-    >,
+    camera_transform_query: Query<(&Camera, &GlobalTransform)>,
 ) {
     // Get the focusable areas related to the current focus and the entities
     // it shares the camera with. This is what the `AutoDirectionalNavigator`
@@ -72,12 +69,7 @@ pub fn rebuild_nav_viz_map(
     let Some(focus) = current_focus.get() else {
         return;
     };
-    // The viewport logical size is needed to figure out where to draw the viz.
-    let Ok(logical_size) = viz_data::viewport_logical_size(focus, viewport_logical_size_query)
-    else {
-        return;
-    };
-    let Some((camera, current_focusable_area)) =
+    let Some((camera_entity, current_focusable_area)) =
         navigable_nodes::entity_to_camera_and_focusable_area(
             focus,
             camera_and_focusable_area_query,
@@ -85,8 +77,12 @@ pub fn rebuild_nav_viz_map(
     else {
         return;
     };
+    let Ok((camera, camera_transform)) = camera_transform_query.get(camera_entity) else {
+        return;
+    };
+
     let mut focusable_areas =
-        navigable_nodes::get_navigable_nodes(camera, navigable_entities_query);
+        navigable_nodes::get_navigable_nodes(camera_entity, navigable_entities_query);
     focusable_areas.push(current_focusable_area);
 
     nav_map::rebuild_nav_map(
@@ -95,9 +91,12 @@ pub fn rebuild_nav_viz_map(
         &focusable_areas,
         &config,
     );
+
+    let viewport_to_world_2d =
+        |viewport_position: Vec2| camera.viewport_to_world_2d(camera_transform, viewport_position);
     viz_data::rebuild_entity_viz_data(
         &mut nav_viz_map.entity_viz_data,
         &focusable_areas,
-        logical_size,
+        &viewport_to_world_2d,
     );
 }
