@@ -98,7 +98,7 @@ pub fn draw_nav_viz(
                     nav_viz_draw_data.arrow_end,
                     color,
                 )
-                .with_tip_length(10.);
+                .with_tip_length(config.arrow_tip_length);
         }
     }
 }

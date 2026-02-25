@@ -122,10 +122,6 @@ pub struct AutoNavVizGizmoConfigGroup {
     /// awkward or confusing placement.
     pub symmetrical_edge_spacing: f32,
 
-    /// For visualizations that need a 180 degree arc to rotate direction, this denotes
-    /// how wide the radius is in world coordinates.
-    pub arc_radius: f32,
-
     /// Determines the arrow tip length for directional arrow in world coordinates.
     pub arrow_tip_length: f32,
 
@@ -163,7 +159,6 @@ impl Default for AutoNavVizGizmoConfigGroup {
             drawing_mode: Default::default(),
             color_mode: Default::default(),
             symmetrical_edge_spacing: 10.,
-            arc_radius: 10.,
             arrow_tip_length: 10.,
             // Yellow
             north_color: Some(Color::Srgba(Srgba::new(1.0, 1.0, 0., 0.8))),
