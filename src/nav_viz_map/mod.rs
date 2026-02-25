@@ -4,8 +4,8 @@ use bevy::input_focus::directional_navigation::{AutoNavigationConfig, Directiona
 use bevy::prelude::*;
 use bevy::ui::auto_directional_navigation::AutoDirectionalNavigation;
 
-mod viz_data;
-pub use crate::nav_viz_map::viz_data::NavVizData;
+mod viz_pos_data;
+pub use crate::nav_viz_map::viz_pos_data::NavVizPosData;
 
 mod nav_map;
 mod navigable_nodes;
@@ -31,7 +31,7 @@ pub struct NavVizMap {
     /// A cache map that stores an entity's FocusableArea (position and size).
     /// The information is used when drawing navigation edges.
     /// This map only contains entities rendered to the same target as the current [`InputFocus`].
-    pub entity_viz_data: EntityHashMap<NavVizData>,
+    pub entity_viz_pos_data: EntityHashMap<NavVizPosData>,
 }
 
 /// A System that rebuilds the [`NavVizMap`] resource with the
@@ -94,8 +94,8 @@ pub fn rebuild_nav_viz_map(
 
     let viewport_to_world_2d =
         |viewport_position: Vec2| camera.viewport_to_world_2d(camera_transform, viewport_position);
-    viz_data::rebuild_entity_viz_data(
-        &mut nav_viz_map.entity_viz_data,
+    viz_pos_data::rebuild_entity_viz_pos_data(
+        &mut nav_viz_map.entity_viz_pos_data,
         &focusable_areas,
         &viewport_to_world_2d,
     );

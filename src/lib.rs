@@ -116,11 +116,18 @@ pub struct AutoNavVizGizmoConfigGroup {
     /// See [`AutoNavVizColorMode`] for more details.
     pub color_mode: AutoNavVizColorMode,
 
-    /// The amount of space (in world space) to render between arrows that would otherwise
+    /// The amount of units (in world space) to render between arrows that would otherwise
     /// overlap. This is mostly used when navigation edges are symmetrical, but can also be used
     /// depending on how the visualization system calculates how best to place arrows to avoid
     /// awkward or confusing placement.
     pub symmetrical_edge_spacing: f32,
+
+    /// For visualizations that need a 180 degree arc to rotate direction, this denotes
+    /// how wide the radius is in world coordinates.
+    pub arc_radius: f32,
+
+    /// Determines the arrow tip length for directional arrow in world coordinates.
+    pub arrow_tip_length: f32,
 
     /// A color representing one of the eight [`CompassOctant`] directions
     /// that the auto navigation system uses.
@@ -156,6 +163,8 @@ impl Default for AutoNavVizGizmoConfigGroup {
             drawing_mode: Default::default(),
             color_mode: Default::default(),
             symmetrical_edge_spacing: 10.,
+            arc_radius: 10.,
+            arrow_tip_length: 10.,
             // Yellow
             north_color: Some(Color::Srgba(Srgba::new(1.0, 1.0, 0., 0.8))),
 
@@ -209,5 +218,18 @@ impl AutoNavVizGizmoConfigGroup {
         self.south_west_color = None;
         self.west_color = None;
         self.north_west_color = None;
+    }
+
+    /// Sets all directional colors back to their defaults.
+    pub fn set_directional_colors_to_defaults(&mut self) {
+        let default = Self::default();
+        self.north_color = default.north_color;
+        self.north_east_color = default.north_east_color;
+        self.east_color = default.east_color;
+        self.south_east_color = default.south_east_color;
+        self.south_color = default.south_color;
+        self.south_west_color = default.south_west_color;
+        self.west_color = default.west_color;
+        self.north_west_color = default.north_west_color;
     }
 }
