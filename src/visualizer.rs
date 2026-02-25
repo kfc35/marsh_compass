@@ -118,26 +118,13 @@ fn get_nav_viz_draw_data(
 
     if is_symmetrical && config.drawing_mode == AutoNavVizDrawMode::EnabledForAll {
         let nudge = config.symmetrical_edge_spacing / 2.;
+        // In general, nudge is applied counter-clockwise for the from* entity,
+        // and applied clockwise for the to* entity.
         match dir {
             CompassOctant::North => {
                 // Nudge West
                 start -= Vec2::new(nudge, 0.);
                 end -= Vec2::new(nudge, 0.);
-            }
-            CompassOctant::South => {
-                // Nudge East
-                start += Vec2::new(nudge, 0.);
-                end += Vec2::new(nudge, 0.);
-            }
-            CompassOctant::East => {
-                // Nudge North
-                start += Vec2::new(0., nudge);
-                end += Vec2::new(0., nudge);
-            }
-            CompassOctant::West => {
-                // Nudge South
-                start -= Vec2::new(0., nudge);
-                end -= Vec2::new(0., nudge);
             }
             CompassOctant::NorthEast => {
                 // Nudge West
@@ -145,10 +132,31 @@ fn get_nav_viz_draw_data(
                 // Nudge North
                 end += Vec2::new(0., nudge);
             }
+            CompassOctant::East => {
+                // Nudge North
+                start += Vec2::new(0., nudge);
+                end += Vec2::new(0., nudge);
+            }
+            CompassOctant::SouthEast => {
+                // Nudge North
+                start += Vec2::new(0., nudge);
+                // Nudge East
+                end += Vec2::new(nudge, 0.);
+            }
+            CompassOctant::South => {
+                // Nudge East
+                start += Vec2::new(nudge, 0.);
+                end += Vec2::new(nudge, 0.);
+            }
             CompassOctant::SouthWest => {
                 // Nudge East
                 start += Vec2::new(nudge, 0.);
                 // Nudge South
+                end -= Vec2::new(0., nudge);
+            }
+            CompassOctant::West => {
+                // Nudge South
+                start -= Vec2::new(0., nudge);
                 end -= Vec2::new(0., nudge);
             }
             CompassOctant::NorthWest => {
@@ -156,12 +164,6 @@ fn get_nav_viz_draw_data(
                 start -= Vec2::new(0., nudge);
                 // Nudge West
                 end -= Vec2::new(nudge, 0.);
-            }
-            CompassOctant::SouthEast => {
-                // Nudge North
-                start += Vec2::new(0., nudge);
-                // Nudge East
-                end += Vec2::new(nudge, 0.);
             }
         }
     }

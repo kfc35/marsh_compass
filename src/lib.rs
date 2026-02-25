@@ -116,6 +116,7 @@ pub struct AutoNavVizGizmoConfigGroup {
     /// See [`AutoNavVizColorMode`] for more details.
     pub color_mode: AutoNavVizColorMode,
 
+    // TODO remove this and only rely on some portion of the size of the node.
     /// The amount of units (in world space) to render between arrows that would otherwise
     /// overlap. This is mostly used when navigation edges are symmetrical, but can also be used
     /// depending on how the visualization system calculates how best to place arrows to avoid

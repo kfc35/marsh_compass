@@ -80,6 +80,7 @@ fn setup(
                 Press '1' to toggle the draw mode.\n\n\
                 Press '2' to toggle the directional colors.\n\n\
                 Press '3' to toggle mixing the entity's color into directional colors.\n\n\
+                Press 'w'/'s' to increase / decrease the arrow tip size.\n\n\
                 Press 'l' to toggle looping navigation edges for border buttons."
             ),],
         ))
@@ -166,6 +167,7 @@ fn update_example(
     mut colors_toggle: ResMut<DirectionalColorsToggle>,
     buttons: Res<OrderedButtons>,
     mut override_map: ResMut<DirectionalNavigationMap>,
+    real_time: Res<Time<Real>>,
 ) {
     // update config
     let (_, group_config) = config_store.config_mut::<AutoNavVizGizmoConfigGroup>();
@@ -187,6 +189,14 @@ fn update_example(
         } else {
             group_config.color_mode = AutoNavVizColorMode::NoMix;
         }
+    }
+    if keyboard.pressed(Key::Character("w".into())) {
+        group_config.arrow_tip_length += 5. * real_time.delta_secs();
+        group_config.arrow_tip_length = group_config.arrow_tip_length.clamp(0., 50.);
+    }
+    if keyboard.pressed(Key::Character("s".into())) {
+        group_config.arrow_tip_length -= 5. * real_time.delta_secs();
+        group_config.arrow_tip_length = group_config.arrow_tip_length.clamp(0., 50.);
     }
 
     // update example
