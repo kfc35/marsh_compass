@@ -188,6 +188,15 @@ impl Default for AutoNavVizGizmoConfigGroup {
 }
 
 impl AutoNavVizGizmoConfigGroup {
+    /// Toggles the draw mode
+    pub fn toggle_draw_mode(&mut self) {
+        if self.drawing_mode == AutoNavVizDrawMode::EnabledForCurrentFocus {
+            self.drawing_mode = AutoNavVizDrawMode::EnabledForAll;
+        } else {
+            self.drawing_mode = AutoNavVizDrawMode::EnabledForCurrentFocus;
+        }
+    }
+
     /// Returns the color set in this config group for the given direction.
     pub fn get_color_for_direction(&self, dir: CompassOctant) -> Option<Color> {
         match dir {

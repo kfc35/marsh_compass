@@ -1,16 +1,17 @@
-//! An example showing a navigation visualization rendered for a simple grid of buttons.
-//! There are no manual overrides specified and no looping edges.
-//! The arrow keys / D-pad can be used to switch between buttons, which will
-//! update the visualization.
+//! An example showing a navigation visualization rendered for a simple 3x3 grid of buttons.
+//! The arrow keys / D-pad can be used to change focus between buttons, which will
+//! update the visualization depending on the draw mode.
+//! Plugin settings and the example itself can be changed with certain key-presses.
+use bevy::input::keyboard::Key;
 use bevy::input_focus::{
     InputDispatchPlugin, InputFocus, InputFocusVisible,
-    directional_navigation::DirectionalNavigationPlugin,
+    directional_navigation::{DirectionalNavigationMap, DirectionalNavigationPlugin},
 };
 use bevy::math::CompassOctant;
 use bevy::platform::collections::HashSet;
 use bevy::prelude::*;
 use bevy::ui::auto_directional_navigation::{AutoDirectionalNavigation, AutoDirectionalNavigator};
-use marsh_compass::AutoNavVizPlugin;
+use marsh_compass::{AutoNavVizColorMode, AutoNavVizGizmoConfigGroup, AutoNavVizPlugin};
 
 fn main() {
     App::new()
@@ -22,32 +23,76 @@ fn main() {
         .insert_resource(InputFocusVisible(true))
         // Add this plugin for the visualization to render.
         .add_plugins(AutoNavVizPlugin)
-        // Example specific resource
+        // Example specific resources
+        .init_resource::<OrderedButtons>()
+        .init_resource::<DirectionalColorsToggle>()
         .init_resource::<ActionState>()
         .add_systems(Startup, setup)
-        .add_systems(PreUpdate, (process_inputs, navigate))
+        .add_systems(
+            PreUpdate,
+            (process_directional_inputs, update_example, navigate),
+        )
         .add_systems(Update, highlight_input_focus)
         .run();
 }
 
-fn setup(mut commands: Commands, mut input_focus: ResMut<InputFocus>) {
+/// A resource used to cache the buttons in the specific setup ordering.
+/// Used to easily add overrides to the navigation map.
+#[derive(Resource, Deref, DerefMut)]
+struct OrderedButtons {
+    buttons: Vec<Entity>,
+}
+
+impl Default for OrderedButtons {
+    fn default() -> Self {
+        OrderedButtons {
+            buttons: Vec::with_capacity(9),
+        }
+    }
+}
+
+fn setup(
+    mut commands: Commands,
+    mut buttons: ResMut<OrderedButtons>,
+    mut input_focus: ResMut<InputFocus>,
+) {
     commands.spawn(Camera2d);
     let root_id = commands
         .spawn((Node {
             width: percent(100),
             height: percent(100),
             align_items: AlignItems::Center,
+            align_content: AlignContent::SpaceEvenly,
             justify_content: JustifyContent::Center,
             ..default()
         },))
         .id();
+
+    let rules_container = commands
+        .spawn((
+            Node {
+                width: px(400),
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+            children![Text::new(
+                "Use the D-Pad or Arrow Keys to navigate.\n\n\
+                Press '1' to toggle the draw mode.\n\n\
+                Press '2' to toggle the directional colors.\n\n\
+                Press '3' to toggle mixing the entity's color into directional colors.\n\n\
+                Press 'l' to toggle looping navigation edges for border buttons."
+            ),],
+        ))
+        .id();
+    commands.entity(root_id).add_child(rules_container);
+
     let button_container = commands
         .spawn((Node {
             width: px(500),
             height: px(500),
             ..default()
         },))
-    .id();
+        .id();
     commands.entity(root_id).add_child(button_container);
 
     let positions = [
@@ -59,6 +104,8 @@ fn setup(mut commands: Commands, mut input_focus: ResMut<InputFocus>) {
         for (j, (left, top)) in row.iter().enumerate() {
             let button = spawn_button(&mut commands, *left, *top, i, j);
             commands.entity(button_container).add_child(button);
+            // buttons are added left to right, top to bottom.
+            buttons.push(button);
             if i == 1 && j == 1 {
                 input_focus.set(button);
             }
@@ -106,6 +153,62 @@ fn highlight_input_focus(
             *border_color = BorderColor::all(Color::Srgba(Srgba::WHITE));
         } else {
             *border_color = BorderColor::DEFAULT;
+        }
+    }
+}
+
+#[derive(Resource, Default, Deref, DerefMut)]
+struct DirectionalColorsToggle(bool);
+
+fn update_example(
+    mut config_store: ResMut<GizmoConfigStore>,
+    keyboard: Res<ButtonInput<Key>>,
+    mut colors_toggle: ResMut<DirectionalColorsToggle>,
+    buttons: Res<OrderedButtons>,
+    mut override_map: ResMut<DirectionalNavigationMap>,
+) {
+    // update config
+    let (_, group_config) = config_store.config_mut::<AutoNavVizGizmoConfigGroup>();
+    if keyboard.just_pressed(Key::Character("1".into())) {
+        group_config.toggle_draw_mode();
+    }
+    if keyboard.just_pressed(Key::Character("2".into())) {
+        if colors_toggle.0 {
+            group_config.set_directional_colors_to_none();
+            colors_toggle.0 = false;
+        } else {
+            group_config.set_directional_colors_to_defaults();
+            colors_toggle.0 = true;
+        }
+    }
+    if keyboard.just_pressed(Key::Character("3".into())) {
+        if group_config.color_mode == AutoNavVizColorMode::NoMix {
+            group_config.color_mode = AutoNavVizColorMode::MixWithEntity(0.5);
+        } else {
+            group_config.color_mode = AutoNavVizColorMode::NoMix;
+        }
+    }
+
+    // update example
+    if keyboard.just_pressed(Key::Character("l".into())) {
+        if override_map.neighbors.is_empty() {
+            for row in 0..3 {
+                override_map.add_looping_edges(&buttons[row * 3..row * 3 + 3], CompassOctant::East);
+            }
+            for col in 0..3 {
+                let col_buttons = [buttons[col], buttons[col + 3], buttons[col + 6]];
+                override_map.add_looping_edges(&col_buttons, CompassOctant::South);
+            }
+            override_map.add_looping_edges(
+                &[buttons[0], buttons[4], buttons[8]],
+                CompassOctant::SouthEast,
+            );
+            override_map.add_looping_edges(
+                &[buttons[2], buttons[4], buttons[6]],
+                CompassOctant::SouthWest,
+            );
+        } else {
+            override_map.clear();
         }
     }
 }
@@ -160,7 +263,7 @@ struct ActionState {
     pressed_actions: HashSet<DirectionalNavigationAction>,
 }
 
-fn process_inputs(
+fn process_directional_inputs(
     mut action_state: ResMut<ActionState>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     gamepad_input: Query<&Gamepad>,
