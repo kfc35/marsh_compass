@@ -1,4 +1,5 @@
 use core::f32::consts::{FRAC_PI_2, PI};
+use std::f32::consts::{FRAC_PI_4, SQRT_2};
 
 use bevy::input_focus::{InputFocus, directional_navigation::NavNeighbors};
 use bevy::math::CompassOctant;
@@ -89,8 +90,8 @@ pub fn draw_nav_viz(
                     }
                 })
                 .unwrap_or(entity_color);
-            if let Some((iso, radius)) = nav_viz_draw_data.maybe_arc {
-                gizmos.arc_2d(iso, PI, radius, color);
+            if let Some((iso, arc_angle, radius)) = nav_viz_draw_data.maybe_arc {
+                gizmos.arc_2d(iso, arc_angle, radius, color);
             }
             gizmos
                 .arrow_2d(
@@ -166,9 +167,9 @@ fn get_nav_viz_draw_data(
     }
 
     let maybe_arc = calculate_arc(start, from_size, end, dir);
-    if let Some((iso, radius, new_arrow_start)) = maybe_arc {
+    if let Some((iso, arc_angle, radius, new_arrow_start)) = maybe_arc {
         NavVizDrawData {
-            maybe_arc: Some((iso, radius)),
+            maybe_arc: Some((iso, arc_angle, radius)),
             arrow_start: new_arrow_start,
             arrow_end: end,
         }
@@ -177,15 +178,16 @@ fn get_nav_viz_draw_data(
     }
 }
 
-/// If the end does not lie in the start's direction, a 180 degree gizmo arc must
-/// be made. If applicable, this function returns the arc's isometry and radius,
+/// If the end does not lie in the start's direction, a gizmo arc must
+/// be drawn to "redirect" the arrow in the correct direction.
+/// If applicable, this function returns the arc's isometry, arc_angle, and radius,
 /// alongside the new arrow_start to compensate for the additional arc.
 fn calculate_arc(
     start: Vec2,
     from_size: Vec2,
     end: Vec2,
     dir: CompassOctant,
-) -> Option<(Isometry2d, f32, Vec2)> {
+) -> Option<(Isometry2d, f32, f32, Vec2)> {
     let nudge = from_size / 8.;
     if !dir.is_in_direction(start, end) {
         match dir {
@@ -194,64 +196,84 @@ fn calculate_arc(
                     rotation: Rot2::radians(PI + FRAC_PI_2),
                     translation: Vec2::new(start.x - nudge.x, start.y),
                 },
+                PI,
                 nudge.x,
                 Vec2::new(start.x - 2. * nudge.x, start.y),
             )),
             CompassOctant::NorthEast => Some((
                 Isometry2d {
-                    rotation: Rot2::radians(PI + FRAC_PI_2),
-                    translation: Vec2::new(start.x - nudge.x, start.y),
+                    rotation: Rot2::radians(PI + FRAC_PI_4),
+                    translation: Vec2::new(start.x - nudge.x / SQRT_2, start.y + nudge.x / SQRT_2),
                 },
+                PI,
                 nudge.x,
-                Vec2::new(start.x - 2. * nudge.x, start.y),
+                Vec2::new(
+                    start.x - 2. * nudge.x / SQRT_2,
+                    start.y + 2. * nudge.x / SQRT_2,
+                ),
             )),
             CompassOctant::East => Some((
                 Isometry2d {
                     rotation: Rot2::PI,
                     translation: Vec2::new(start.x, start.y + nudge.y),
                 },
+                PI,
                 nudge.y,
                 Vec2::new(start.x, start.y + 2. * nudge.y),
             )),
             CompassOctant::SouthEast => Some((
                 Isometry2d {
-                    rotation: Rot2::radians(PI),
-                    translation: Vec2::new(start.x, start.y + nudge.y),
+                    rotation: Rot2::radians(FRAC_PI_2 + FRAC_PI_4),
+                    translation: Vec2::new(start.x + nudge.y / SQRT_2, start.y + nudge.y / SQRT_2),
                 },
+                PI,
                 nudge.y,
-                Vec2::new(start.x, start.y + 2. * nudge.y),
+                Vec2::new(
+                    start.x + 2. * nudge.y / SQRT_2,
+                    start.y + 2. * nudge.y / SQRT_2,
+                ),
             )),
             CompassOctant::South => Some((
                 Isometry2d {
                     rotation: Rot2::FRAC_PI_2,
                     translation: Vec2::new(start.x + nudge.x, start.y),
                 },
+                PI,
                 nudge.x,
                 Vec2::new(start.x + 2. * nudge.x, start.y),
             )),
             CompassOctant::SouthWest => Some((
                 Isometry2d {
-                    rotation: Rot2::FRAC_PI_2,
-                    translation: Vec2::new(start.x + nudge.x, start.y),
+                    rotation: Rot2::FRAC_PI_4,
+                    translation: Vec2::new(start.x + nudge.x / SQRT_2, start.y - nudge.x / SQRT_2),
                 },
+                PI,
                 nudge.x,
-                Vec2::new(start.x + 2. * nudge.x, start.y),
+                Vec2::new(
+                    start.x + 2. * nudge.x / SQRT_2,
+                    start.y - 2. * nudge.x / SQRT_2,
+                ),
             )),
             CompassOctant::West => Some((
                 Isometry2d {
                     rotation: Rot2::IDENTITY,
                     translation: Vec2::new(start.x, start.y - nudge.y),
                 },
+                PI,
                 nudge.y,
                 Vec2::new(start.x, start.y - 2. * nudge.y),
             )),
             CompassOctant::NorthWest => Some((
                 Isometry2d {
-                    rotation: Rot2::IDENTITY,
-                    translation: Vec2::new(start.x, start.y - nudge.y),
+                    rotation: Rot2::radians(-FRAC_PI_4),
+                    translation: Vec2::new(start.x - nudge.y / SQRT_2, start.y - nudge.y / SQRT_2),
                 },
+                PI,
                 nudge.y,
-                Vec2::new(start.x, start.y - 2. * nudge.y),
+                Vec2::new(
+                    start.x - 2. * nudge.y / SQRT_2,
+                    start.y - 2. * nudge.y / SQRT_2,
+                ),
             )),
         }
     } else {
@@ -298,8 +320,8 @@ fn get_position_in_direction(pos: Vec2, size: Vec2, dir: CompassOctant) -> Vec2 
 }
 
 struct NavVizDrawData {
-    // If the gizmo needs an arc before the arrow, this will be Some((iso, radius))
-    maybe_arc: Option<(Isometry2d, f32)>,
+    // If the gizmo needs an arc before the arrow, this will be Some((iso, arc_angle, radius))
+    maybe_arc: Option<(Isometry2d, f32, f32)>,
     arrow_start: Vec2,
     arrow_end: Vec2,
 }
