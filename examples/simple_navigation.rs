@@ -176,10 +176,10 @@ fn update_example(
     }
     if keyboard.just_pressed(Key::Character("2".into())) {
         if colors_toggle.0 {
-            group_config.set_directional_colors_to_none();
+            group_config.set_directional_colors_to_defaults();
             colors_toggle.0 = false;
         } else {
-            group_config.set_directional_colors_to_defaults();
+            group_config.set_directional_colors_to_none();
             colors_toggle.0 = true;
         }
     }
