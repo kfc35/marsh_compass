@@ -247,15 +247,19 @@ fn get_nav_viz_draw_data(
             // The symmetrical double ended arrow will be rendered as
             // two single arrows connected by arcs and a line.
             // This arrow is at the beginning of the start arc
+            // The arrow nudge is necessary for the arrow head to render.
+            let arrow_nudge = Into::<Dir2>::into(dir).as_vec2();
             Some(DrawLineData {
-                start,
-                end: start, // this is intentional!
+                start: start + arrow_nudge,
+                end: start,
                 color,
                 line_type: DrawLineType::Arrow,
             })
         } else {
             None
         };
+        // The arrow nudge is necessary for the arrow head to render.
+        let arrow_nudge = Into::<Dir2>::into(end_dir).as_vec2();
         NavVizDrawData::LoopAround(DrawLoopAroundData {
             start_arc: DrawArcData {
                 isometry: start_isom,
@@ -279,7 +283,7 @@ fn get_nav_viz_draw_data(
                 },
                 // The arrow is at the end of the end arc
                 DrawLineData {
-                    start: end, // this is intentional!
+                    start: end + arrow_nudge,
                     end,
                     color,
                     line_type: DrawLineType::Arrow,
