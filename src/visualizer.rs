@@ -304,10 +304,10 @@ fn get_nav_viz_draw_data(
 /// alongside the new line start point to compensate for the additional arc.
 fn calculate_start_arc(
     point: Vec2,
-    from_size: Vec2,
+    size: Vec2,
     dir_of_point: CompassOctant,
 ) -> ((Isometry2d, f32, f32), Vec2) {
-    let nudge = from_size / 8.;
+    let nudge = size / 11.;
     match dir_of_point {
         CompassOctant::North => (
             (
@@ -416,11 +416,11 @@ fn calculate_start_arc(
 /// alongside the new line end point to compensate for the additional arc.
 fn calculate_end_arc(
     point: Vec2,
-    from_size: Vec2,
+    size: Vec2,
     dir_of_point: CompassOctant,
 ) -> ((Isometry2d, f32, f32), Vec2) {
     // Is this worth consolidating with calculate_start_arc?
-    let nudge = from_size / 8.;
+    let nudge = size / 11.;
     match dir_of_point {
         CompassOctant::North => (
             (
