@@ -10,26 +10,27 @@ pub use crate::nav_viz_map::viz_pos_data::NavVizPosData;
 mod nav_map;
 mod navigable_nodes;
 
-/// Resource used to cache the complete navigation map: auto navigation edges combined
+/// Resource used to represent the complete navigation map: auto navigation edges combined
 /// with overridden manual edges. It also includes world-coordinate position and size
-/// data of each entity in a separate map for visualization purposes.
+/// data of each entity in a separate entity hash map .
 #[derive(Resource, Default)]
 pub struct NavVizMap {
     /// This map contains the navigation edges that would be taken by the
     /// [`AutoDirectionalNavigator`](bevy::ui::auto_directional_navigation::AutoDirectionalNavigator)
-    /// with overridden manual edges. This map is scoped to only include entities that are either:
+    /// with overridden manual edges from the [`DirectionalNavigationMap`] resource.
+    /// This map is scoped to only include entities that are either:
     ///
     /// - under the same camera as the current [`InputFocus`](bevy::input_focus::InputFocus) or
     ///
     /// - manually defined in the existing [`DirectionalNavigationMap`] resource.
     ///
-    /// Despite it having the same type, this is not to be confused with the
+    /// Despite `map` having the same underlying type, this is not to be confused with the
     /// [`DirectionalNavigationMap`] resource, which is a resource that contains only manually
     /// defined navigation edges.
     pub map: DirectionalNavigationMap,
 
-    /// A cache map that stores an entity's FocusableArea (position and size).
-    /// The information is used when drawing navigation edges.
+    /// A map that stores an entity's [`NavVizPosData`] - position in world coordinates and size.
+    /// The information is used for placement of the drawn navigation edges.
     /// This map only contains entities rendered to the same target as the current [`InputFocus`].
     pub entity_viz_pos_data: EntityHashMap<NavVizPosData>,
 }

@@ -299,7 +299,11 @@ fn calculate_arc(
 
     // Ensuring the radius is some fraction of size ensures that
     // multiple consecutive looping edges are spaced out visually when
-    // approaching near nodes.
+    // approaching near nodes. Along a side, we must accommodate at most
+    // 3 drawn arcs. Since the arcs can be mirrored, we should accommodate
+    // 6 arcs per side to account for these permutations.
+    // The radius length is 1/2 the arc diameter. So, the radius must be
+    // at most 1/12 the length of a side.
     let radius = size / 12.;
     let translation_nudge = if mirror { -radius } else { radius };
     match dir_of_point {
