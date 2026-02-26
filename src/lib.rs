@@ -34,7 +34,7 @@
 //! fn setup(mut config_store: ResMut<GizmoConfigStore>) {
 //!     let mut config = config_store.config_mut::<AutoNavVizGizmoConfigGroup>().1;
 //!     // e.g.
-//!     config.drawing_mode = AutoNavVizDrawMode::EnabledForAll;
+//!     config.drawing_mode = AutoNavVizDrawMode::EnabledForCurrentFocus;
 //! }
 //! ```
 

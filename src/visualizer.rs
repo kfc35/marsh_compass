@@ -84,13 +84,9 @@ pub fn draw_nav_viz(
                 .or_insert(Oklcha::sequential_dispersed(neighbor.index_u32()).into());
 
             let nav_viz_draw_data = get_nav_viz_draw_data(
-                from_pos,
-                from_size,
-                from_color,
+                (from_pos, from_size, from_color),
                 dir,
-                to_pos,
-                to_size,
-                to_color,
+                (to_pos, to_size, to_color),
                 nav_edge_is_symmetrical,
                 config,
             );
@@ -98,7 +94,7 @@ pub fn draw_nav_viz(
                 NavVizDrawData::Straight(line_data) => {
                     draw_line(&mut gizmos, config, &line_data);
                 }
-                NavVizDrawData::LoopAround(loop_around_data) => {
+                NavVizDrawData::Looped(loop_around_data) => {
                     gizmos.arc_2d(
                         loop_around_data.start_arc.isometry,
                         loop_around_data.start_arc.arc_angle,
@@ -121,16 +117,10 @@ pub fn draw_nav_viz(
     }
 }
 
-// TODO need to reduce the number of arguments supposedly.
-// can group the from and to data points into tuples.
 fn get_nav_viz_draw_data(
-    from_pos: Vec2,
-    from_size: Vec2,
-    from_color: Color,
+    (from_pos, from_size, from_color): (Vec2, Vec2, Color),
     dir: CompassOctant,
-    to_pos: Vec2,
-    to_size: Vec2,
-    to_color: Color,
+    (to_pos, to_size, to_color): (Vec2, Vec2, Color),
     is_symmetrical: bool,
     config: &AutoNavVizGizmoConfigGroup,
 ) -> NavVizDrawData {
@@ -139,9 +129,7 @@ fn get_nav_viz_draw_data(
     let arrow_must_reverse = !dir.is_in_direction(start, end);
     if arrow_must_reverse {
         // The arrow will wrap around the target entity and point to its opposite side.
-        // This looks better and conveys the
-        // "looping" nature of this navigation path,
-        // especially when the arrow has to be double ended.
+        // This looks better and conveys the "looping" nature of this navigation path.
         end_dir = end_dir.opposite();
         end = get_position_in_direction(to_pos, to_size, end_dir);
     }
@@ -238,7 +226,7 @@ fn get_nav_viz_draw_data(
     }
 
     if arrow_must_reverse {
-        // If we must draw a double ended arrow, the line drawn from the source entity to the start arc should
+        // If we must draw a double ended arrow, the line drawn from the start arc to the source entity should
         // have an arrow head facing towards the source entity.
         let start_line_line_type = if line_type == DrawLineType::DoubleEndedArrow {
             DrawLineType::Arrow
@@ -248,6 +236,7 @@ fn get_nav_viz_draw_data(
 
         let (start_line, start_arc, line_start) =
             calculate_arc(start, from_size, dir, false, color, start_line_line_type);
+        // The ending arc should always end in an arrow
         let (end_line, end_arc, line_end) =
             calculate_arc(end, to_size, end_dir, true, color, DrawLineType::Arrow);
         let line_between_arcs = DrawLineData {
@@ -256,7 +245,7 @@ fn get_nav_viz_draw_data(
             color,
             line_type: DrawLineType::Line,
         };
-        NavVizDrawData::LoopAround(DrawLoopAroundData {
+        NavVizDrawData::Looped(DrawLoopedLineData {
             start_arc,
             end_arc,
             line_data: [start_line, line_between_arcs, end_line],
@@ -272,12 +261,12 @@ fn get_nav_viz_draw_data(
 }
 
 /// This function returns:
-/// - line data between the given `point` to a 180 degree arc. This may or may not be an arrow.
-/// - the arc itself.
-/// - the endpoint of the arc, where a connecting line may be drawn from/to.
+/// - [`DrawLineData`] for the line/arrow (determined by [`DrawLineType`]) between the given
+///   `point` and the semi-circle arc.
+/// - the [`DrawArcData`] arc itself.
+/// - the endpoint of the arc as a [`Vec2`], where a connecting line may be drawn from/to.
 ///
-/// For ending arcs, the arc should be drawn mirrored.
-/// TODO gradient arrows?
+/// For ending arcs, the arc should be drawn mirrored (`mirror` set to true) for aesthetics.
 fn calculate_arc(
     point: Vec2,
     size: Vec2,
@@ -438,8 +427,10 @@ fn calculate_arc(
     }
 }
 
-/// Gets the point and direction on the rectangle defined by its center `pos` and `size` that is
-/// closest in distance squared to `point`
+/// Returns the point and direction of the point on the rectangle
+/// defined by its center `pos` and `size`. This point is closest in distance
+/// squared to `point` compared to the other points in the seven other [`CompassOctant`]
+/// directions.
 fn get_closest_point(pos: Vec2, size: Vec2, point: Vec2) -> (Vec2, CompassOctant) {
     let mut closest_dir = CompassOctant::North;
     let mut closest_point = get_position_in_direction(pos, size, closest_dir);
@@ -464,7 +455,7 @@ fn get_closest_point(pos: Vec2, size: Vec2, point: Vec2) -> (Vec2, CompassOctant
     (closest_point, closest_dir)
 }
 
-/// Gets the point on the rectangle defined by its center `pos` and `size` that is in the direction of `dir`.
+/// Returns the point on the rectangle defined by its center `pos` and `size` that is in the direction of `dir`.
 fn get_position_in_direction(pos: Vec2, size: Vec2, dir: CompassOctant) -> Vec2 {
     match dir {
         CompassOctant::North => pos + Vec2::new(0., size.y / 2.),
@@ -478,6 +469,7 @@ fn get_position_in_direction(pos: Vec2, size: Vec2, dir: CompassOctant) -> Vec2 
     }
 }
 
+/// Given a [`DrawLineData`], draws a line or arrow via gizmos.
 fn draw_line(
     gizmos: &mut Gizmos<AutoNavVizGizmoConfigGroup>,
     config: &AutoNavVizGizmoConfigGroup,
@@ -501,23 +493,39 @@ fn draw_line(
     }
 }
 
+/// A unit of draw data representing a navigation edge.
 #[derive(Clone, Copy, PartialEq)]
 enum NavVizDrawData {
-    LoopAround(DrawLoopAroundData),
+    /// A navigation edge that connects the two closest points of
+    /// two navigation nodes
     Straight(DrawLineData),
+
+    /// A navigation edge that must loop around its nodes to point to
+    /// the farthest points of two navigation nodes.
+    Looped(DrawLoopedLineData),
 }
 
+/// A struct containing multiple draw elements that, when composed,
+/// visualize a "looped" navigation edge. Compared to a "straight"
+/// navigation edge, a "looped" edge hooks around its start and
+/// destination nodes to point to/from their farthest points.
 #[derive(Clone, Copy, PartialEq)]
-struct DrawLoopAroundData {
+struct DrawLoopedLineData {
+    /// The arc (semi-circle) drawn near the source node.
     start_arc: DrawArcData,
+
+    /// The arc (semi-circle) drawn near the destination node.
     end_arc: DrawArcData,
-    // contains:
-    // - the line from the source node to the start_arc
-    // - the mid body line between arcs and the ending arrow
-    // - the line from the end_arc to the the destination node
+
+    /// line_data contains:
+    /// - the line from the source node to the start_arc
+    /// - the line between start_arc and end_arc
+    /// - the line from the end_arc to the destination node
     line_data: [DrawLineData; 3],
 }
 
+/// A struct containing necessary information to draw an arc
+/// via [`Gizmos`].
 #[derive(Clone, Copy, PartialEq)]
 struct DrawArcData {
     isometry: Isometry2d,
@@ -526,6 +534,8 @@ struct DrawArcData {
     color: Color,
 }
 
+/// A struct containing necessary information to draw a line/arrow
+/// via [`Gizmos`].
 #[derive(Clone, Copy, PartialEq)]
 struct DrawLineData {
     line_type: DrawLineType,
@@ -534,6 +544,8 @@ struct DrawLineData {
     color: Color,
 }
 
+/// An enum used by [`DrawLineData`] to denote whether the line should
+/// be drawn as a Line, Arrow, or a Double Ended Arrow
 #[derive(Clone, Copy, PartialEq)]
 enum DrawLineType {
     Line,
