@@ -1,11 +1,14 @@
-use core::f32::consts::{FRAC_PI_2, PI};
-use std::f32::consts::{FRAC_PI_4, SQRT_2};
+use core::f32::consts::{FRAC_PI_2, FRAC_PI_4, PI, SQRT_2};
 
+use bevy::ecs::entity::{EntityHashMap, EntityHashSet};
 use bevy::input_focus::{InputFocus, directional_navigation::NavNeighbors};
 use bevy::math::CompassOctant;
 use bevy::prelude::*;
 
-use crate::{AutoNavVizColorMode, AutoNavVizDrawMode, AutoNavVizGizmoConfigGroup, NavVizMap};
+use crate::{
+    AutoNavVizColorMode, AutoNavVizDrawMode, AutoNavVizGizmoConfigGroup, NavVizMap,
+    SymmetricalEdgeSettings,
+};
 
 /// The system that draws the visualizations of the auto navigation
 /// system. It uses gizmos to draw arrows between entities.
@@ -14,6 +17,8 @@ pub fn draw_nav_viz(
     input_focus: Res<InputFocus>,
     nav_viz_map: Res<NavVizMap>,
     mut gizmos: Gizmos<AutoNavVizGizmoConfigGroup>,
+    mut processed_entities: Local<EntityHashSet>,
+    mut entity_to_color: Local<EntityHashMap<Color>>,
 ) {
     let config = config_store.config::<AutoNavVizGizmoConfigGroup>().1;
     let entries_to_draw_nav = match config.drawing_mode {
@@ -26,22 +31,18 @@ pub fn draw_nav_viz(
                 return;
             }
         }
-        AutoNavVizDrawMode::EnabledForAll => nav_viz_map
+        AutoNavVizDrawMode::EnabledForAll(_) => nav_viz_map
             .map
             .neighbors
             .iter()
             .collect::<Vec<(&Entity, &NavNeighbors)>>(),
     };
 
-    // Right now, this loop is double drawing symmetric edges instead of utilizing
-    // double headed arrows.
-    // Unfortunately, when trying to implement double headed arrows, interpolating
-    // colors of opposite directions mix to become gray with their default values.
-    // The default values were picked to be opposites on the color wheel after all.
-    // If we want to have a double headed arrow, we should allow a way to gradient
-    // the color of the double headed arrow for gizmos so it still looks pretty.
+    processed_entities.clear();
     for (entity, neighbors) in entries_to_draw_nav.into_iter() {
-        let entity_color = Oklcha::sequential_dispersed(entity.index_u32()).into();
+        let from_color = *entity_to_color
+            .entry(*entity)
+            .or_insert(Oklcha::sequential_dispersed(entity.index_u32()).into());
         for (i, maybe_neighbor) in neighbors.neighbors.iter().enumerate() {
             let Some(neighbor) = maybe_neighbor else {
                 continue;
@@ -61,232 +62,470 @@ pub fn draw_nav_viz(
                 .get(neighbor)
                 .map(|fa| (fa.world_position, fa.size))
             else {
-                // A future case to handle appropriately, perhaps with a white arrow
+                // A future case to handle more appropriately, perhaps with a white arrow
                 // to indicate that it goes elsewhere.
                 // A text gizmo could also be used here to indicate where it goes
                 // (available in Bevy 0.19)
                 continue;
             };
-
-            let is_symmetrical =
+            let nav_edge_is_symmetrical =
                 nav_viz_map.map.get_neighbor(*neighbor, dir.opposite()) == Some(*entity);
+            // If the draw mode merges symmetrical edges and this is a symmetrical edge,
+            // We should only draw the edge once.
+            if nav_edge_is_symmetrical
+                && let AutoNavVizDrawMode::EnabledForAll(symm_edge_settings) = config.drawing_mode
+                && let SymmetricalEdgeSettings::MergeIntoDoubleEnded(_) = symm_edge_settings
+                && processed_entities.contains(neighbor)
+            {
+                continue;
+            }
+            let to_color = *entity_to_color
+                .entry(*neighbor)
+                .or_insert(Oklcha::sequential_dispersed(neighbor.index_u32()).into());
 
             let nav_viz_draw_data = get_nav_viz_draw_data(
                 from_pos,
                 from_size,
+                from_color,
                 dir,
                 to_pos,
                 to_size,
-                is_symmetrical,
+                to_color,
+                nav_edge_is_symmetrical,
                 config,
             );
-            let color = config
-                .get_color_for_direction(dir)
-                .map(|color| {
-                    if let AutoNavVizColorMode::MixWithEntity(factor) = config.color_mode {
-                        color.mix(&entity_color, factor)
-                    } else {
-                        color
+            match nav_viz_draw_data {
+                NavVizDrawData::Straight(line_data) => {
+                    draw_line(&mut gizmos, config, &line_data);
+                }
+                NavVizDrawData::LoopAround(loop_around_data) => {
+                    gizmos.arc_2d(
+                        loop_around_data.start_arc.isometry,
+                        loop_around_data.start_arc.arc_angle,
+                        loop_around_data.start_arc.radius,
+                        loop_around_data.start_arc.color,
+                    );
+                    gizmos.arc_2d(
+                        loop_around_data.end_arc.isometry,
+                        loop_around_data.end_arc.arc_angle,
+                        loop_around_data.end_arc.radius,
+                        loop_around_data.end_arc.color,
+                    );
+                    if let Some(line_data) = loop_around_data.start_line_data {
+                        draw_line(&mut gizmos, config, &line_data);
                     }
-                })
-                .unwrap_or(entity_color);
-            if let Some((iso, arc_angle, radius)) = nav_viz_draw_data.maybe_arc {
-                gizmos.arc_2d(iso, arc_angle, radius, color);
+                    for line_data in loop_around_data.line_data {
+                        draw_line(&mut gizmos, config, &line_data);
+                    }
+                }
             }
-            gizmos
-                .arrow_2d(
-                    nav_viz_draw_data.arrow_start,
-                    nav_viz_draw_data.arrow_end,
-                    color,
-                )
-                .with_tip_length(config.arrow_tip_length);
         }
+        processed_entities.insert(*entity);
     }
 }
 
 fn get_nav_viz_draw_data(
     from_pos: Vec2,
     from_size: Vec2,
+    from_color: Color,
     dir: CompassOctant,
     to_pos: Vec2,
     to_size: Vec2,
+    to_color: Color,
     is_symmetrical: bool,
     config: &AutoNavVizGizmoConfigGroup,
 ) -> NavVizDrawData {
     let mut start = get_position_in_direction(from_pos, from_size, dir);
-    let mut end = get_closest_point(to_pos, to_size, start);
+    let (mut end, mut end_dir) = get_closest_point(to_pos, to_size, start);
+    let arrow_must_reverse = !dir.is_in_direction(start, end);
+    if arrow_must_reverse {
+        // The arrow will wrap around the target entity and point to its opposite side.
+        // This looks better and conveys the
+        // "looping" nature of this navigation path,
+        // especially when the arrow has to be double ended.
+        end_dir = end_dir.opposite();
+        end = get_position_in_direction(to_pos, to_size, end_dir);
+    }
+    let mut color = config
+        .get_color_for_direction(dir)
+        .map(|color| {
+            if let AutoNavVizColorMode::MixWithEntity(factor) = config.color_mode {
+                color.mix(&from_color, factor)
+            } else {
+                color
+            }
+        })
+        .unwrap_or(from_color);
+    let mut line_type = DrawLineType::Arrow;
 
-    if is_symmetrical && config.drawing_mode == AutoNavVizDrawMode::EnabledForAll {
-        let nudge = config.symmetrical_edge_spacing / 2.;
-        // In general, nudge is applied counter-clockwise for the from* entity,
-        // and applied clockwise for the to* entity.
+    if is_symmetrical
+        && let AutoNavVizDrawMode::EnabledForAll(symm_edge_settings) = config.drawing_mode
+    {
+        let start_nudge = match symm_edge_settings {
+            SymmetricalEdgeSettings::SpacingBetweenSingleArrows => from_size / 16.,
+            _ => Vec2::ZERO,
+        };
+        let end_nudge = match symm_edge_settings {
+            SymmetricalEdgeSettings::SpacingBetweenSingleArrows => to_size / 16.,
+            _ => Vec2::ZERO,
+        };
+        // In general, nudge is applied counter-clockwise for the from* entity.
+        // Nudge is applied counter-clockwise for the to* entity if arrow_must_reverse,
+        // clockwise otherwise.
         match dir {
             CompassOctant::North => {
                 // Nudge West
-                start -= Vec2::new(nudge, 0.);
-                end -= Vec2::new(nudge, 0.);
+                start -= Vec2::new(start_nudge.x, 0.);
+                end -= Vec2::new(end_nudge.x, 0.);
             }
             CompassOctant::NorthEast => {
                 // Nudge West
-                start -= Vec2::new(nudge, 0.);
+                start -= Vec2::new(start_nudge.x, 0.);
                 // Nudge North
-                end += Vec2::new(0., nudge);
+                end += Vec2::new(0., end_nudge.y);
             }
             CompassOctant::East => {
                 // Nudge North
-                start += Vec2::new(0., nudge);
-                end += Vec2::new(0., nudge);
+                start += Vec2::new(0., start_nudge.y);
+                // Nudge North
+                end += Vec2::new(0., end_nudge.y);
             }
             CompassOctant::SouthEast => {
                 // Nudge North
-                start += Vec2::new(0., nudge);
+                start += Vec2::new(0., start_nudge.y);
                 // Nudge East
-                end += Vec2::new(nudge, 0.);
+                end += Vec2::new(end_nudge.x, 0.);
             }
             CompassOctant::South => {
                 // Nudge East
-                start += Vec2::new(nudge, 0.);
-                end += Vec2::new(nudge, 0.);
+                start += Vec2::new(start_nudge.x, 0.);
+                end += Vec2::new(end_nudge.x, 0.);
             }
             CompassOctant::SouthWest => {
                 // Nudge East
-                start += Vec2::new(nudge, 0.);
+                start += Vec2::new(start_nudge.x, 0.);
                 // Nudge South
-                end -= Vec2::new(0., nudge);
+                end -= Vec2::new(0., end_nudge.y);
             }
             CompassOctant::West => {
                 // Nudge South
-                start -= Vec2::new(0., nudge);
-                end -= Vec2::new(0., nudge);
+                start -= Vec2::new(0., start_nudge.y);
+                end -= Vec2::new(0., end_nudge.y);
             }
             CompassOctant::NorthWest => {
                 // Nudge South
-                start -= Vec2::new(0., nudge);
+                start -= Vec2::new(0., start_nudge.y);
                 // Nudge West
-                end -= Vec2::new(nudge, 0.);
+                end -= Vec2::new(end_nudge.x, 0.);
             }
         }
+
+        if let SymmetricalEdgeSettings::MergeIntoDoubleEnded(merge_color_factor) =
+            symm_edge_settings
+        {
+            let reverse_color = config
+                .get_color_for_direction(dir.opposite())
+                .map(|color| {
+                    if let AutoNavVizColorMode::MixWithEntity(factor) = config.color_mode {
+                        color.mix(&to_color, factor)
+                    } else {
+                        color
+                    }
+                })
+                .unwrap_or(to_color);
+            color = color.mix(&reverse_color, merge_color_factor);
+            line_type = DrawLineType::DoubleEndedArrow;
+        }
     }
 
-    let maybe_arc = calculate_arc(start, from_size, end, dir);
-    if let Some((iso, arc_angle, radius, new_arrow_start)) = maybe_arc {
-        NavVizDrawData {
-            maybe_arc: Some((iso, arc_angle, radius)),
-            arrow_start: new_arrow_start,
-            arrow_end: end,
-        }
+    if arrow_must_reverse {
+        let ((start_isom, start_arc_angle, start_radius), line_start) =
+            calculate_start_arc(start, from_size, dir);
+        let ((end_isom, end_arc_angle, end_radius), line_end) =
+            calculate_end_arc(end, to_size, end_dir);
+        let start_line_data = if line_type == DrawLineType::DoubleEndedArrow {
+            // The symmetrical double ended arrow will be rendered as
+            // two single arrows connected by arcs and a line.
+            // This arrow is at the beginning of the start arc
+            Some(DrawLineData {
+                start,
+                end: start, // this is intentional!
+                color,
+                line_type: DrawLineType::Arrow,
+            })
+        } else {
+            None
+        };
+        NavVizDrawData::LoopAround(DrawLoopAroundData {
+            start_arc: DrawArcData {
+                isometry: start_isom,
+                arc_angle: start_arc_angle,
+                radius: start_radius,
+                color,
+            },
+            end_arc: DrawArcData {
+                isometry: end_isom,
+                arc_angle: end_arc_angle,
+                radius: end_radius,
+                color,
+            },
+            start_line_data,
+            line_data: [
+                DrawLineData {
+                    start: line_start,
+                    end: line_end,
+                    color,
+                    line_type: DrawLineType::Line,
+                },
+                // The arrow is at the end of the end arc
+                DrawLineData {
+                    start: end, // this is intentional!
+                    end,
+                    color,
+                    line_type: DrawLineType::Arrow,
+                },
+            ],
+        })
     } else {
-        NavVizDrawData::new(start, end)
+        NavVizDrawData::Straight(DrawLineData {
+            start,
+            end,
+            color,
+            line_type,
+        })
     }
 }
 
-/// If the end does not lie in the start's direction, a gizmo arc must
-/// be drawn to "redirect" the arrow in the correct direction.
-/// If applicable, this function returns the arc's isometry, arc_angle, and radius,
-/// alongside the new arrow_start to compensate for the additional arc.
-fn calculate_arc(
-    start: Vec2,
+/// This function returns the start arc's isometry, arc_angle, and radius,
+/// alongside the new line start point to compensate for the additional arc.
+fn calculate_start_arc(
+    point: Vec2,
     from_size: Vec2,
-    end: Vec2,
-    dir: CompassOctant,
-) -> Option<(Isometry2d, f32, f32, Vec2)> {
+    dir_of_point: CompassOctant,
+) -> ((Isometry2d, f32, f32), Vec2) {
     let nudge = from_size / 8.;
-    if !dir.is_in_direction(start, end) {
-        match dir {
-            CompassOctant::North => Some((
+    match dir_of_point {
+        CompassOctant::North => (
+            (
                 Isometry2d {
                     rotation: Rot2::radians(PI + FRAC_PI_2),
-                    translation: Vec2::new(start.x - nudge.x, start.y),
+                    translation: Vec2::new(point.x - nudge.x, point.y),
                 },
                 PI,
                 nudge.x,
-                Vec2::new(start.x - 2. * nudge.x, start.y),
-            )),
-            CompassOctant::NorthEast => Some((
+            ),
+            Vec2::new(point.x - 2. * nudge.x, point.y),
+        ),
+        CompassOctant::NorthEast => (
+            (
                 Isometry2d {
                     rotation: Rot2::radians(PI + FRAC_PI_4),
-                    translation: Vec2::new(start.x - nudge.x / SQRT_2, start.y + nudge.x / SQRT_2),
+                    translation: Vec2::new(point.x - nudge.x / SQRT_2, point.y + nudge.x / SQRT_2),
                 },
                 PI,
                 nudge.x,
-                Vec2::new(
-                    start.x - 2. * nudge.x / SQRT_2,
-                    start.y + 2. * nudge.x / SQRT_2,
-                ),
-            )),
-            CompassOctant::East => Some((
+            ),
+            Vec2::new(
+                point.x - 2. * nudge.x / SQRT_2,
+                point.y + 2. * nudge.x / SQRT_2,
+            ),
+        ),
+        CompassOctant::East => (
+            (
                 Isometry2d {
                     rotation: Rot2::PI,
-                    translation: Vec2::new(start.x, start.y + nudge.y),
+                    translation: Vec2::new(point.x, point.y + nudge.y),
                 },
                 PI,
                 nudge.y,
-                Vec2::new(start.x, start.y + 2. * nudge.y),
-            )),
-            CompassOctant::SouthEast => Some((
+            ),
+            Vec2::new(point.x, point.y + 2. * nudge.y),
+        ),
+        CompassOctant::SouthEast => (
+            (
                 Isometry2d {
                     rotation: Rot2::radians(FRAC_PI_2 + FRAC_PI_4),
-                    translation: Vec2::new(start.x + nudge.y / SQRT_2, start.y + nudge.y / SQRT_2),
+                    translation: Vec2::new(point.x + nudge.y / SQRT_2, point.y + nudge.y / SQRT_2),
                 },
                 PI,
                 nudge.y,
-                Vec2::new(
-                    start.x + 2. * nudge.y / SQRT_2,
-                    start.y + 2. * nudge.y / SQRT_2,
-                ),
-            )),
-            CompassOctant::South => Some((
+            ),
+            Vec2::new(
+                point.x + 2. * nudge.y / SQRT_2,
+                point.y + 2. * nudge.y / SQRT_2,
+            ),
+        ),
+        CompassOctant::South => (
+            (
                 Isometry2d {
                     rotation: Rot2::FRAC_PI_2,
-                    translation: Vec2::new(start.x + nudge.x, start.y),
+                    translation: Vec2::new(point.x + nudge.x, point.y),
                 },
                 PI,
                 nudge.x,
-                Vec2::new(start.x + 2. * nudge.x, start.y),
-            )),
-            CompassOctant::SouthWest => Some((
+            ),
+            Vec2::new(point.x + 2. * nudge.x, point.y),
+        ),
+        CompassOctant::SouthWest => (
+            (
                 Isometry2d {
                     rotation: Rot2::FRAC_PI_4,
-                    translation: Vec2::new(start.x + nudge.x / SQRT_2, start.y - nudge.x / SQRT_2),
+                    translation: Vec2::new(point.x + nudge.x / SQRT_2, point.y - nudge.x / SQRT_2),
                 },
                 PI,
                 nudge.x,
-                Vec2::new(
-                    start.x + 2. * nudge.x / SQRT_2,
-                    start.y - 2. * nudge.x / SQRT_2,
-                ),
-            )),
-            CompassOctant::West => Some((
+            ),
+            Vec2::new(
+                point.x + 2. * nudge.x / SQRT_2,
+                point.y - 2. * nudge.x / SQRT_2,
+            ),
+        ),
+        CompassOctant::West => (
+            (
                 Isometry2d {
                     rotation: Rot2::IDENTITY,
-                    translation: Vec2::new(start.x, start.y - nudge.y),
+                    translation: Vec2::new(point.x, point.y - nudge.y),
                 },
                 PI,
                 nudge.y,
-                Vec2::new(start.x, start.y - 2. * nudge.y),
-            )),
-            CompassOctant::NorthWest => Some((
+            ),
+            Vec2::new(point.x, point.y - 2. * nudge.y),
+        ),
+        CompassOctant::NorthWest => (
+            (
                 Isometry2d {
                     rotation: Rot2::radians(-FRAC_PI_4),
-                    translation: Vec2::new(start.x - nudge.y / SQRT_2, start.y - nudge.y / SQRT_2),
+                    translation: Vec2::new(point.x - nudge.y / SQRT_2, point.y - nudge.y / SQRT_2),
                 },
                 PI,
                 nudge.y,
-                Vec2::new(
-                    start.x - 2. * nudge.y / SQRT_2,
-                    start.y - 2. * nudge.y / SQRT_2,
-                ),
-            )),
-        }
-    } else {
-        None
+            ),
+            Vec2::new(
+                point.x - 2. * nudge.y / SQRT_2,
+                point.y - 2. * nudge.y / SQRT_2,
+            ),
+        ),
     }
 }
 
-/// Gets the point on the rectangle defined by its center `pos` and `size` that is
+/// This function returns the end arc's isometry, arc_angle, and radius,
+/// alongside the new line end point to compensate for the additional arc.
+fn calculate_end_arc(
+    point: Vec2,
+    from_size: Vec2,
+    dir_of_point: CompassOctant,
+) -> ((Isometry2d, f32, f32), Vec2) {
+    // Is this worth consolidating with calculate_start_arc?
+    let nudge = from_size / 8.;
+    match dir_of_point {
+        CompassOctant::North => (
+            (
+                Isometry2d {
+                    rotation: Rot2::radians(PI + FRAC_PI_2),
+                    translation: Vec2::new(point.x + nudge.x, point.y),
+                },
+                PI,
+                nudge.x,
+            ),
+            Vec2::new(point.x + 2. * nudge.x, point.y),
+        ),
+        CompassOctant::NorthEast => (
+            (
+                Isometry2d {
+                    rotation: Rot2::radians(PI + FRAC_PI_4),
+                    translation: Vec2::new(point.x + nudge.x / SQRT_2, point.y - nudge.x / SQRT_2),
+                },
+                PI,
+                nudge.x,
+            ),
+            Vec2::new(
+                point.x + 2. * nudge.x / SQRT_2,
+                point.y - 2. * nudge.x / SQRT_2,
+            ),
+        ),
+        CompassOctant::East => (
+            (
+                Isometry2d {
+                    rotation: Rot2::radians(PI),
+                    translation: Vec2::new(point.x, point.y - nudge.y),
+                },
+                PI,
+                nudge.y,
+            ),
+            Vec2::new(point.x, point.y - 2. * nudge.y),
+        ),
+        CompassOctant::SouthEast => (
+            (
+                Isometry2d {
+                    rotation: Rot2::radians(FRAC_PI_2 + FRAC_PI_4),
+                    translation: Vec2::new(point.x - nudge.y / SQRT_2, point.y - nudge.y / SQRT_2),
+                },
+                PI,
+                nudge.y,
+            ),
+            Vec2::new(
+                point.x - 2. * nudge.y / SQRT_2,
+                point.y - 2. * nudge.y / SQRT_2,
+            ),
+        ),
+        CompassOctant::South => (
+            (
+                Isometry2d {
+                    rotation: Rot2::radians(FRAC_PI_2),
+                    translation: Vec2::new(point.x - nudge.x, point.y),
+                },
+                PI,
+                nudge.x,
+            ),
+            Vec2::new(point.x - 2. * nudge.x, point.y),
+        ),
+        CompassOctant::SouthWest => (
+            (
+                Isometry2d {
+                    rotation: Rot2::radians(FRAC_PI_4),
+                    translation: Vec2::new(point.x - nudge.x / SQRT_2, point.y + nudge.x / SQRT_2),
+                },
+                PI,
+                nudge.x,
+            ),
+            Vec2::new(
+                point.x - 2. * nudge.x / SQRT_2,
+                point.y + 2. * nudge.x / SQRT_2,
+            ),
+        ),
+        CompassOctant::West => (
+            (
+                Isometry2d {
+                    rotation: Rot2::IDENTITY,
+                    translation: Vec2::new(point.x, point.y + nudge.y),
+                },
+                PI,
+                nudge.y,
+            ),
+            Vec2::new(point.x, point.y + 2. * nudge.y),
+        ),
+        CompassOctant::NorthWest => (
+            (
+                Isometry2d {
+                    rotation: Rot2::radians(-FRAC_PI_4),
+                    translation: Vec2::new(point.x + nudge.y / SQRT_2, point.y + nudge.y / SQRT_2),
+                },
+                PI,
+                nudge.y,
+            ),
+            Vec2::new(
+                point.x + 2. * nudge.y / SQRT_2,
+                point.y + 2. * nudge.y / SQRT_2,
+            ),
+        ),
+    }
+}
+
+/// Gets the point and direction on the rectangle defined by its center `pos` and `size` that is
 /// closest in distance squared to `point`
-fn get_closest_point(pos: Vec2, size: Vec2, point: Vec2) -> Vec2 {
-    let mut closest_point = get_position_in_direction(pos, size, CompassOctant::North);
+fn get_closest_point(pos: Vec2, size: Vec2, point: Vec2) -> (Vec2, CompassOctant) {
+    let mut closest_dir = CompassOctant::North;
+    let mut closest_point = get_position_in_direction(pos, size, closest_dir);
     let mut squared_dist = closest_point.distance_squared(point);
     for dir in [
         CompassOctant::NorthEast,
@@ -300,11 +539,12 @@ fn get_closest_point(pos: Vec2, size: Vec2, point: Vec2) -> Vec2 {
         let candidate = get_position_in_direction(pos, size, dir);
         let candidate_dist = candidate.distance_squared(point);
         if candidate_dist < squared_dist {
+            closest_dir = dir;
             closest_point = candidate;
             squared_dist = candidate_dist;
         }
     }
-    closest_point
+    (closest_point, closest_dir)
 }
 
 /// Gets the point on the rectangle defined by its center `pos` and `size` that is in the direction of `dir`.
@@ -321,21 +561,66 @@ fn get_position_in_direction(pos: Vec2, size: Vec2, dir: CompassOctant) -> Vec2 
     }
 }
 
-struct NavVizDrawData {
-    // If the gizmo needs an arc before the arrow, this will be Some((iso, arc_angle, radius))
-    maybe_arc: Option<(Isometry2d, f32, f32)>,
-    arrow_start: Vec2,
-    arrow_end: Vec2,
-}
-
-impl NavVizDrawData {
-    fn new(arrow_start: Vec2, arrow_end: Vec2) -> Self {
-        NavVizDrawData {
-            maybe_arc: None,
-            arrow_start,
-            arrow_end,
+fn draw_line(
+    gizmos: &mut Gizmos<AutoNavVizGizmoConfigGroup>,
+    config: &AutoNavVizGizmoConfigGroup,
+    line_data: &DrawLineData,
+) {
+    match line_data.line_type {
+        DrawLineType::Line => {
+            gizmos.line_2d(line_data.start, line_data.end, line_data.color);
+        }
+        DrawLineType::Arrow => {
+            gizmos
+                .arrow_2d(line_data.start, line_data.end, line_data.color)
+                .with_tip_length(config.arrow_tip_length);
+        }
+        DrawLineType::DoubleEndedArrow => {
+            gizmos
+                .arrow_2d(line_data.start, line_data.end, line_data.color)
+                .with_tip_length(config.arrow_tip_length)
+                .with_double_end();
         }
     }
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum NavVizDrawData {
+    LoopAround(DrawLoopAroundData),
+    Straight(DrawLineData),
+}
+
+#[derive(Clone, Copy, PartialEq)]
+struct DrawLoopAroundData {
+    start_arc: DrawArcData,
+    end_arc: DrawArcData,
+    // for symmetrical looping edges, this will be set to draw an arrow.
+    start_line_data: Option<DrawLineData>,
+    // the mid body line between arcs and the ending arrow
+    line_data: [DrawLineData; 2],
+}
+
+#[derive(Clone, Copy, PartialEq)]
+struct DrawArcData {
+    isometry: Isometry2d,
+    arc_angle: f32,
+    radius: f32,
+    color: Color,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+struct DrawLineData {
+    line_type: DrawLineType,
+    start: Vec2,
+    end: Vec2,
+    color: Color,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum DrawLineType {
+    Line,
+    Arrow,
+    DoubleEndedArrow,
 }
 
 #[cfg(test)]

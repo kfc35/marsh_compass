@@ -76,11 +76,37 @@ impl Plugin for AutoNavVizPlugin {
 ///   entities rendered to the same target as the current focus.
 ///
 /// The default is to draw for the current focus only.
-#[derive(Clone, Default, Debug, Reflect, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Default, Debug, Reflect, PartialEq)]
 pub enum AutoNavVizDrawMode {
     #[default]
     EnabledForCurrentFocus,
-    EnabledForAll,
+    EnabledForAll(SymmetricalEdgeSettings),
+}
+
+/// Setting for how to render symmetrical edges when the whole auto navigation
+/// graph is drawn.
+#[derive(Clone, Copy, Debug, Reflect, PartialEq)]
+pub enum SymmetricalEdgeSettings {
+    /// Merge the two single ended arrows into one drawn double ended arrow.
+    /// The f32 provided is the mixing factor between the colors of the two single ended arrows.
+    /// It should be a number between 0.0 and 1.0 as defined by [`Color::mix`], where "this color"
+    /// refers to the color of the arrow from the source entity to the destination entity.
+    MergeIntoDoubleEnded(f32),
+
+    /// Draw two single ended arrows with spacing inbetween the arrows.
+    /// The spacing is automatically calculated by the length and height of the notes.
+    SpacingBetweenSingleArrows,
+
+    /// Draw two single ended arrows that are simply drawn over each other.
+    /// No merging is done between the two arrows.
+    OverlappingSingleArrows,
+}
+
+impl Default for SymmetricalEdgeSettings {
+    fn default() -> Self {
+        // Merge the two single ended arrows, mixing their colors equally.
+        Self::MergeIntoDoubleEnded(0.5)
+    }
 }
 
 /// Setting for whether the directional colors provided by the [`AutoNavVizGizmoConfigGroup`]
@@ -89,7 +115,7 @@ pub enum AutoNavVizDrawMode {
 /// - not be mixed
 ///
 /// The default is not to mix.
-#[derive(Clone, Debug, Default, Reflect, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Reflect, PartialEq)]
 pub enum AutoNavVizColorMode {
     /// Mix the color with a random color generated uniquely for the source entity.
     /// The f32 provided is the mixing factor and should be a number between 0.0 and 1.0.
@@ -115,13 +141,6 @@ pub struct AutoNavVizGizmoConfigGroup {
     /// The coloring mode
     /// See [`AutoNavVizColorMode`] for more details.
     pub color_mode: AutoNavVizColorMode,
-
-    // TODO remove this and only rely on some portion of the size of the node.
-    /// The amount of units (in world space) to render between arrows that would otherwise
-    /// overlap. This is mostly used when navigation edges are symmetrical, but can also be used
-    /// depending on how the visualization system calculates how best to place arrows to avoid
-    /// awkward or confusing placement.
-    pub symmetrical_edge_spacing: f32,
 
     /// Determines the arrow tip length for directional arrow in world coordinates.
     pub arrow_tip_length: f32,
@@ -159,7 +178,6 @@ impl Default for AutoNavVizGizmoConfigGroup {
         Self {
             drawing_mode: Default::default(),
             color_mode: Default::default(),
-            symmetrical_edge_spacing: 10.,
             arrow_tip_length: 10.,
             // Yellow
             north_color: Some(Color::Srgba(Srgba::new(1.0, 1.0, 0., 0.8))),
@@ -189,10 +207,11 @@ impl Default for AutoNavVizGizmoConfigGroup {
 }
 
 impl AutoNavVizGizmoConfigGroup {
-    /// Toggles the draw mode
+    /// Toggles the draw mode, using the default values for each draw mode.
     pub fn toggle_draw_mode(&mut self) {
         if self.drawing_mode == AutoNavVizDrawMode::EnabledForCurrentFocus {
-            self.drawing_mode = AutoNavVizDrawMode::EnabledForAll;
+            self.drawing_mode =
+                AutoNavVizDrawMode::EnabledForAll(SymmetricalEdgeSettings::default());
         } else {
             self.drawing_mode = AutoNavVizDrawMode::EnabledForCurrentFocus;
         }
