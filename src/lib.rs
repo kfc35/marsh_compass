@@ -142,6 +142,7 @@ pub struct AutoNavVizGizmoConfigGroup {
     /// See [`AutoNavVizColorMode`] for more details.
     pub color_mode: AutoNavVizColorMode,
 
+    // TODO only manual edges, only automated edges, or both.
     /// Determines the arrow tip length for directional arrow in world coordinates.
     pub arrow_tip_length: f32,
 

@@ -124,6 +124,8 @@ pub fn draw_nav_viz(
     }
 }
 
+// TODO need to reduce the number of arguments supposedly.
+// can group the from and to data points into tuples.
 fn get_nav_viz_draw_data(
     from_pos: Vec2,
     from_size: Vec2,
@@ -239,10 +241,8 @@ fn get_nav_viz_draw_data(
     }
 
     if arrow_must_reverse {
-        let ((start_isom, start_arc_angle, start_radius), line_start) =
-            calculate_start_arc(start, from_size, dir);
-        let ((end_isom, end_arc_angle, end_radius), line_end) =
-            calculate_end_arc(end, to_size, end_dir);
+        let (start_arc, line_start) = calculate_arc(start, from_size, dir, false, color);
+        let (end_arc, line_end) = calculate_arc(end, to_size, end_dir, true, color);
         let start_line_data = if line_type == DrawLineType::DoubleEndedArrow {
             // The symmetrical double ended arrow will be rendered as
             // two single arrows connected by arcs and a line.
@@ -261,18 +261,8 @@ fn get_nav_viz_draw_data(
         // The arrow nudge is necessary for the arrow head to render.
         let arrow_nudge = Into::<Dir2>::into(end_dir).as_vec2();
         NavVizDrawData::LoopAround(DrawLoopAroundData {
-            start_arc: DrawArcData {
-                isometry: start_isom,
-                arc_angle: start_arc_angle,
-                radius: start_radius,
-                color,
-            },
-            end_arc: DrawArcData {
-                isometry: end_isom,
-                arc_angle: end_arc_angle,
-                radius: end_radius,
-                color,
-            },
+            start_arc,
+            end_arc,
             start_line_data,
             line_data: [
                 DrawLineData {
@@ -300,226 +290,141 @@ fn get_nav_viz_draw_data(
     }
 }
 
-/// This function returns the start arc's isometry, arc_angle, and radius,
-/// alongside the new line start point to compensate for the additional arc.
-fn calculate_start_arc(
+/// This function returns an arc's isometry, arc_angle, and radius,
+/// alongside the new line point to compensate for the additional arc.
+/// For ending arcs, the placement of the arc should be mirrored.
+/// TODO push the arc further out. so that we can have a more legitimate arrow.
+/// doesn't have to be much. Then also return a Vec2 of the line segment.
+/// Then, start can always be defined! And it'll just be a line or an arrow and
+/// attached to the data as normal.
+fn calculate_arc(
     point: Vec2,
     size: Vec2,
     dir_of_point: CompassOctant,
-) -> ((Isometry2d, f32, f32), Vec2) {
-    let nudge = size / 11.;
+    mirror: bool,
+    color: Color,
+) -> (DrawArcData, Vec2) {
+    let radius = size / 11.;
+    let displacement = if mirror { -radius } else { radius };
     match dir_of_point {
         CompassOctant::North => (
-            (
-                Isometry2d {
+            DrawArcData {
+                isometry: Isometry2d {
                     rotation: Rot2::radians(PI + FRAC_PI_2),
-                    translation: Vec2::new(point.x - nudge.x, point.y),
+                    translation: Vec2::new(point.x - displacement.x, point.y),
                 },
-                PI,
-                nudge.x,
-            ),
-            Vec2::new(point.x - 2. * nudge.x, point.y),
+                arc_angle: PI,
+                radius: radius.x,
+                color,
+            },
+            Vec2::new(point.x - 2. * displacement.x, point.y),
         ),
         CompassOctant::NorthEast => (
-            (
-                Isometry2d {
+            DrawArcData {
+                isometry: Isometry2d {
                     rotation: Rot2::radians(PI + FRAC_PI_4),
-                    translation: Vec2::new(point.x - nudge.x / SQRT_2, point.y + nudge.x / SQRT_2),
+                    translation: Vec2::new(
+                        point.x - displacement.x / SQRT_2,
+                        point.y + displacement.x / SQRT_2,
+                    ),
                 },
-                PI,
-                nudge.x,
-            ),
+                arc_angle: PI,
+                radius: radius.x,
+                color,
+            },
             Vec2::new(
-                point.x - 2. * nudge.x / SQRT_2,
-                point.y + 2. * nudge.x / SQRT_2,
+                point.x - 2. * displacement.x / SQRT_2,
+                point.y + 2. * displacement.x / SQRT_2,
             ),
         ),
         CompassOctant::East => (
-            (
-                Isometry2d {
+            DrawArcData {
+                isometry: Isometry2d {
                     rotation: Rot2::PI,
-                    translation: Vec2::new(point.x, point.y + nudge.y),
+                    translation: Vec2::new(point.x, point.y + displacement.y),
                 },
-                PI,
-                nudge.y,
-            ),
-            Vec2::new(point.x, point.y + 2. * nudge.y),
+                arc_angle: PI,
+                radius: radius.y,
+                color,
+            },
+            Vec2::new(point.x, point.y + 2. * displacement.y),
         ),
         CompassOctant::SouthEast => (
-            (
-                Isometry2d {
+            DrawArcData {
+                isometry: Isometry2d {
                     rotation: Rot2::radians(FRAC_PI_2 + FRAC_PI_4),
-                    translation: Vec2::new(point.x + nudge.y / SQRT_2, point.y + nudge.y / SQRT_2),
+                    translation: Vec2::new(
+                        point.x + displacement.y / SQRT_2,
+                        point.y + displacement.y / SQRT_2,
+                    ),
                 },
-                PI,
-                nudge.y,
-            ),
+                arc_angle: PI,
+                radius: radius.y,
+                color,
+            },
             Vec2::new(
-                point.x + 2. * nudge.y / SQRT_2,
-                point.y + 2. * nudge.y / SQRT_2,
+                point.x + 2. * displacement.y / SQRT_2,
+                point.y + 2. * displacement.y / SQRT_2,
             ),
         ),
         CompassOctant::South => (
-            (
-                Isometry2d {
+            DrawArcData {
+                isometry: Isometry2d {
                     rotation: Rot2::FRAC_PI_2,
-                    translation: Vec2::new(point.x + nudge.x, point.y),
+                    translation: Vec2::new(point.x + displacement.x, point.y),
                 },
-                PI,
-                nudge.x,
-            ),
-            Vec2::new(point.x + 2. * nudge.x, point.y),
+                arc_angle: PI,
+                radius: radius.x,
+                color,
+            },
+            Vec2::new(point.x + 2. * displacement.x, point.y),
         ),
         CompassOctant::SouthWest => (
-            (
-                Isometry2d {
+            DrawArcData {
+                isometry: Isometry2d {
                     rotation: Rot2::FRAC_PI_4,
-                    translation: Vec2::new(point.x + nudge.x / SQRT_2, point.y - nudge.x / SQRT_2),
+                    translation: Vec2::new(
+                        point.x + displacement.x / SQRT_2,
+                        point.y - displacement.x / SQRT_2,
+                    ),
                 },
-                PI,
-                nudge.x,
-            ),
+                arc_angle: PI,
+                radius: radius.x,
+                color,
+            },
             Vec2::new(
-                point.x + 2. * nudge.x / SQRT_2,
-                point.y - 2. * nudge.x / SQRT_2,
+                point.x + 2. * displacement.x / SQRT_2,
+                point.y - 2. * displacement.x / SQRT_2,
             ),
         ),
         CompassOctant::West => (
-            (
-                Isometry2d {
+            DrawArcData {
+                isometry: Isometry2d {
                     rotation: Rot2::IDENTITY,
-                    translation: Vec2::new(point.x, point.y - nudge.y),
+                    translation: Vec2::new(point.x, point.y - displacement.y),
                 },
-                PI,
-                nudge.y,
-            ),
-            Vec2::new(point.x, point.y - 2. * nudge.y),
+                arc_angle: PI,
+                radius: radius.y,
+                color,
+            },
+            Vec2::new(point.x, point.y - 2. * displacement.y),
         ),
         CompassOctant::NorthWest => (
-            (
-                Isometry2d {
+            DrawArcData {
+                isometry: Isometry2d {
                     rotation: Rot2::radians(-FRAC_PI_4),
-                    translation: Vec2::new(point.x - nudge.y / SQRT_2, point.y - nudge.y / SQRT_2),
+                    translation: Vec2::new(
+                        point.x - displacement.y / SQRT_2,
+                        point.y - displacement.y / SQRT_2,
+                    ),
                 },
-                PI,
-                nudge.y,
-            ),
+                arc_angle: PI,
+                radius: radius.y,
+                color,
+            },
             Vec2::new(
-                point.x - 2. * nudge.y / SQRT_2,
-                point.y - 2. * nudge.y / SQRT_2,
-            ),
-        ),
-    }
-}
-
-/// This function returns the end arc's isometry, arc_angle, and radius,
-/// alongside the new line end point to compensate for the additional arc.
-fn calculate_end_arc(
-    point: Vec2,
-    size: Vec2,
-    dir_of_point: CompassOctant,
-) -> ((Isometry2d, f32, f32), Vec2) {
-    // Is this worth consolidating with calculate_start_arc?
-    let nudge = size / 11.;
-    match dir_of_point {
-        CompassOctant::North => (
-            (
-                Isometry2d {
-                    rotation: Rot2::radians(PI + FRAC_PI_2),
-                    translation: Vec2::new(point.x + nudge.x, point.y),
-                },
-                PI,
-                nudge.x,
-            ),
-            Vec2::new(point.x + 2. * nudge.x, point.y),
-        ),
-        CompassOctant::NorthEast => (
-            (
-                Isometry2d {
-                    rotation: Rot2::radians(PI + FRAC_PI_4),
-                    translation: Vec2::new(point.x + nudge.x / SQRT_2, point.y - nudge.x / SQRT_2),
-                },
-                PI,
-                nudge.x,
-            ),
-            Vec2::new(
-                point.x + 2. * nudge.x / SQRT_2,
-                point.y - 2. * nudge.x / SQRT_2,
-            ),
-        ),
-        CompassOctant::East => (
-            (
-                Isometry2d {
-                    rotation: Rot2::radians(PI),
-                    translation: Vec2::new(point.x, point.y - nudge.y),
-                },
-                PI,
-                nudge.y,
-            ),
-            Vec2::new(point.x, point.y - 2. * nudge.y),
-        ),
-        CompassOctant::SouthEast => (
-            (
-                Isometry2d {
-                    rotation: Rot2::radians(FRAC_PI_2 + FRAC_PI_4),
-                    translation: Vec2::new(point.x - nudge.y / SQRT_2, point.y - nudge.y / SQRT_2),
-                },
-                PI,
-                nudge.y,
-            ),
-            Vec2::new(
-                point.x - 2. * nudge.y / SQRT_2,
-                point.y - 2. * nudge.y / SQRT_2,
-            ),
-        ),
-        CompassOctant::South => (
-            (
-                Isometry2d {
-                    rotation: Rot2::radians(FRAC_PI_2),
-                    translation: Vec2::new(point.x - nudge.x, point.y),
-                },
-                PI,
-                nudge.x,
-            ),
-            Vec2::new(point.x - 2. * nudge.x, point.y),
-        ),
-        CompassOctant::SouthWest => (
-            (
-                Isometry2d {
-                    rotation: Rot2::radians(FRAC_PI_4),
-                    translation: Vec2::new(point.x - nudge.x / SQRT_2, point.y + nudge.x / SQRT_2),
-                },
-                PI,
-                nudge.x,
-            ),
-            Vec2::new(
-                point.x - 2. * nudge.x / SQRT_2,
-                point.y + 2. * nudge.x / SQRT_2,
-            ),
-        ),
-        CompassOctant::West => (
-            (
-                Isometry2d {
-                    rotation: Rot2::IDENTITY,
-                    translation: Vec2::new(point.x, point.y + nudge.y),
-                },
-                PI,
-                nudge.y,
-            ),
-            Vec2::new(point.x, point.y + 2. * nudge.y),
-        ),
-        CompassOctant::NorthWest => (
-            (
-                Isometry2d {
-                    rotation: Rot2::radians(-FRAC_PI_4),
-                    translation: Vec2::new(point.x + nudge.y / SQRT_2, point.y + nudge.y / SQRT_2),
-                },
-                PI,
-                nudge.y,
-            ),
-            Vec2::new(
-                point.x + 2. * nudge.y / SQRT_2,
-                point.y + 2. * nudge.y / SQRT_2,
+                point.x - 2. * displacement.y / SQRT_2,
+                point.y - 2. * displacement.y / SQRT_2,
             ),
         ),
     }
