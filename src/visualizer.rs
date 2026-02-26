@@ -111,9 +111,6 @@ pub fn draw_nav_viz(
                         loop_around_data.end_arc.radius,
                         loop_around_data.end_arc.color,
                     );
-                    if let Some(line_data) = loop_around_data.start_line_data {
-                        draw_line(&mut gizmos, config, &line_data);
-                    }
                     for line_data in loop_around_data.line_data {
                         draw_line(&mut gizmos, config, &line_data);
                     }
@@ -241,44 +238,28 @@ fn get_nav_viz_draw_data(
     }
 
     if arrow_must_reverse {
-        let (start_arc, line_start) = calculate_arc(start, from_size, dir, false, color);
-        let (end_arc, line_end) = calculate_arc(end, to_size, end_dir, true, color);
-        let start_line_data = if line_type == DrawLineType::DoubleEndedArrow {
-            // The symmetrical double ended arrow will be rendered as
-            // two single arrows connected by arcs and a line.
-            // This arrow is at the beginning of the start arc
-            // The arrow nudge is necessary for the arrow head to render.
-            let arrow_nudge = Into::<Dir2>::into(dir).as_vec2();
-            Some(DrawLineData {
-                start: start + arrow_nudge,
-                end: start,
-                color,
-                line_type: DrawLineType::Arrow,
-            })
+        // If we must draw a double ended arrow, the line drawn from the source entity to the start arc should
+        // have an arrow head facing towards the source entity.
+        let start_line_line_type = if line_type == DrawLineType::DoubleEndedArrow {
+            DrawLineType::Arrow
         } else {
-            None
+            DrawLineType::Line
         };
-        // The arrow nudge is necessary for the arrow head to render.
-        let arrow_nudge = Into::<Dir2>::into(end_dir).as_vec2();
+
+        let (start_line, start_arc, line_start) =
+            calculate_arc(start, from_size, dir, false, color, start_line_line_type);
+        let (end_line, end_arc, line_end) =
+            calculate_arc(end, to_size, end_dir, true, color, DrawLineType::Arrow);
+        let line_between_arcs = DrawLineData {
+            start: line_start,
+            end: line_end,
+            color,
+            line_type: DrawLineType::Line,
+        };
         NavVizDrawData::LoopAround(DrawLoopAroundData {
             start_arc,
             end_arc,
-            start_line_data,
-            line_data: [
-                DrawLineData {
-                    start: line_start,
-                    end: line_end,
-                    color,
-                    line_type: DrawLineType::Line,
-                },
-                // The arrow is at the end of the end arc
-                DrawLineData {
-                    start: end + arrow_nudge,
-                    end,
-                    color,
-                    line_type: DrawLineType::Arrow,
-                },
-            ],
+            line_data: [start_line, line_between_arcs, end_line],
         })
     } else {
         NavVizDrawData::Straight(DrawLineData {
@@ -290,42 +271,59 @@ fn get_nav_viz_draw_data(
     }
 }
 
-/// This function returns an arc's isometry, arc_angle, and radius,
-/// alongside the new line point to compensate for the additional arc.
-/// For ending arcs, the placement of the arc should be mirrored.
-/// TODO push the arc further out. so that we can have a more legitimate arrow.
-/// doesn't have to be much. Then also return a Vec2 of the line segment.
-/// Then, start can always be defined! And it'll just be a line or an arrow and
-/// attached to the data as normal.
+/// This function returns:
+/// - line data between the given `point` to a 180 degree arc. This may or may not be an arrow.
+/// - the arc itself.
+/// - the endpoint of the arc, where a connecting line may be drawn from/to.
+///
+/// For ending arcs, the arc should be drawn mirrored.
+/// TODO gradient arrows?
 fn calculate_arc(
     point: Vec2,
     size: Vec2,
     dir_of_point: CompassOctant,
     mirror: bool,
     color: Color,
-) -> (DrawArcData, Vec2) {
-    let radius = size / 11.;
-    let displacement = if mirror { -radius } else { radius };
+    line_type: DrawLineType,
+) -> (DrawLineData, DrawArcData, Vec2) {
+    // line_start is also the starting point of the arc.
+    // This logic also pushes the arc to be drawn further out from the node.
+    // It looks a little awkward when drawn too close.
+    let line_start = Into::<Dir2>::into(dir_of_point).as_vec2() * 10. + point;
+    let draw_line_data = DrawLineData {
+        start: line_start,
+        end: point,
+        color,
+        line_type,
+    };
+
+    // Ensuring the radius is some fraction of size ensures that
+    // multiple consecutive looping edges are spaced out visually when
+    // approaching near nodes.
+    let radius = size / 12.;
+    let translation_nudge = if mirror { -radius } else { radius };
     match dir_of_point {
         CompassOctant::North => (
+            draw_line_data,
             DrawArcData {
                 isometry: Isometry2d {
                     rotation: Rot2::radians(PI + FRAC_PI_2),
-                    translation: Vec2::new(point.x - displacement.x, point.y),
+                    translation: Vec2::new(line_start.x - translation_nudge.x, line_start.y),
                 },
                 arc_angle: PI,
                 radius: radius.x,
                 color,
             },
-            Vec2::new(point.x - 2. * displacement.x, point.y),
+            Vec2::new(line_start.x - 2. * translation_nudge.x, line_start.y),
         ),
         CompassOctant::NorthEast => (
+            draw_line_data,
             DrawArcData {
                 isometry: Isometry2d {
                     rotation: Rot2::radians(PI + FRAC_PI_4),
                     translation: Vec2::new(
-                        point.x - displacement.x / SQRT_2,
-                        point.y + displacement.x / SQRT_2,
+                        line_start.x - translation_nudge.x / SQRT_2,
+                        line_start.y + translation_nudge.x / SQRT_2,
                     ),
                 },
                 arc_angle: PI,
@@ -333,29 +331,31 @@ fn calculate_arc(
                 color,
             },
             Vec2::new(
-                point.x - 2. * displacement.x / SQRT_2,
-                point.y + 2. * displacement.x / SQRT_2,
+                line_start.x - 2. * translation_nudge.x / SQRT_2,
+                line_start.y + 2. * translation_nudge.x / SQRT_2,
             ),
         ),
         CompassOctant::East => (
+            draw_line_data,
             DrawArcData {
                 isometry: Isometry2d {
                     rotation: Rot2::PI,
-                    translation: Vec2::new(point.x, point.y + displacement.y),
+                    translation: Vec2::new(line_start.x, line_start.y + translation_nudge.y),
                 },
                 arc_angle: PI,
                 radius: radius.y,
                 color,
             },
-            Vec2::new(point.x, point.y + 2. * displacement.y),
+            Vec2::new(line_start.x, line_start.y + 2. * translation_nudge.y),
         ),
         CompassOctant::SouthEast => (
+            draw_line_data,
             DrawArcData {
                 isometry: Isometry2d {
                     rotation: Rot2::radians(FRAC_PI_2 + FRAC_PI_4),
                     translation: Vec2::new(
-                        point.x + displacement.y / SQRT_2,
-                        point.y + displacement.y / SQRT_2,
+                        line_start.x + translation_nudge.y / SQRT_2,
+                        line_start.y + translation_nudge.y / SQRT_2,
                     ),
                 },
                 arc_angle: PI,
@@ -363,29 +363,31 @@ fn calculate_arc(
                 color,
             },
             Vec2::new(
-                point.x + 2. * displacement.y / SQRT_2,
-                point.y + 2. * displacement.y / SQRT_2,
+                line_start.x + 2. * translation_nudge.y / SQRT_2,
+                line_start.y + 2. * translation_nudge.y / SQRT_2,
             ),
         ),
         CompassOctant::South => (
+            draw_line_data,
             DrawArcData {
                 isometry: Isometry2d {
                     rotation: Rot2::FRAC_PI_2,
-                    translation: Vec2::new(point.x + displacement.x, point.y),
+                    translation: Vec2::new(line_start.x + translation_nudge.x, line_start.y),
                 },
                 arc_angle: PI,
                 radius: radius.x,
                 color,
             },
-            Vec2::new(point.x + 2. * displacement.x, point.y),
+            Vec2::new(line_start.x + 2. * translation_nudge.x, line_start.y),
         ),
         CompassOctant::SouthWest => (
+            draw_line_data,
             DrawArcData {
                 isometry: Isometry2d {
                     rotation: Rot2::FRAC_PI_4,
                     translation: Vec2::new(
-                        point.x + displacement.x / SQRT_2,
-                        point.y - displacement.x / SQRT_2,
+                        line_start.x + translation_nudge.x / SQRT_2,
+                        line_start.y - translation_nudge.x / SQRT_2,
                     ),
                 },
                 arc_angle: PI,
@@ -393,29 +395,31 @@ fn calculate_arc(
                 color,
             },
             Vec2::new(
-                point.x + 2. * displacement.x / SQRT_2,
-                point.y - 2. * displacement.x / SQRT_2,
+                line_start.x + 2. * translation_nudge.x / SQRT_2,
+                line_start.y - 2. * translation_nudge.x / SQRT_2,
             ),
         ),
         CompassOctant::West => (
+            draw_line_data,
             DrawArcData {
                 isometry: Isometry2d {
                     rotation: Rot2::IDENTITY,
-                    translation: Vec2::new(point.x, point.y - displacement.y),
+                    translation: Vec2::new(line_start.x, line_start.y - translation_nudge.y),
                 },
                 arc_angle: PI,
                 radius: radius.y,
                 color,
             },
-            Vec2::new(point.x, point.y - 2. * displacement.y),
+            Vec2::new(line_start.x, line_start.y - 2. * translation_nudge.y),
         ),
         CompassOctant::NorthWest => (
+            draw_line_data,
             DrawArcData {
                 isometry: Isometry2d {
                     rotation: Rot2::radians(-FRAC_PI_4),
                     translation: Vec2::new(
-                        point.x - displacement.y / SQRT_2,
-                        point.y - displacement.y / SQRT_2,
+                        line_start.x - translation_nudge.y / SQRT_2,
+                        line_start.y - translation_nudge.y / SQRT_2,
                     ),
                 },
                 arc_angle: PI,
@@ -423,8 +427,8 @@ fn calculate_arc(
                 color,
             },
             Vec2::new(
-                point.x - 2. * displacement.y / SQRT_2,
-                point.y - 2. * displacement.y / SQRT_2,
+                line_start.x - 2. * translation_nudge.y / SQRT_2,
+                line_start.y - 2. * translation_nudge.y / SQRT_2,
             ),
         ),
     }
@@ -503,10 +507,11 @@ enum NavVizDrawData {
 struct DrawLoopAroundData {
     start_arc: DrawArcData,
     end_arc: DrawArcData,
-    // for symmetrical looping edges, this will be set to draw an arrow.
-    start_line_data: Option<DrawLineData>,
-    // the mid body line between arcs and the ending arrow
-    line_data: [DrawLineData; 2],
+    // contains:
+    // - the line from the source node to the start_arc
+    // - the mid body line between arcs and the ending arrow
+    // - the line from the end_arc to the the destination node
+    line_data: [DrawLineData; 3],
 }
 
 #[derive(Clone, Copy, PartialEq)]
