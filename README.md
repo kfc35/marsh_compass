@@ -3,7 +3,7 @@ A Bevy Plugin that draws a visualization of the auto directional navigation in B
 
 ## Usage
 Simply add the `AutoNavVizPlugin` plugin to your app that has auto
-directional navigation enabled setup.
+directional navigation set up.
 
 ```rust
 fn main() {
@@ -24,9 +24,13 @@ The plugin can be configured via its gizmo config group `AutoNavVizGizmoConfigGr
 ``` rust
 fn setup(mut config_store: ResMut<GizmoConfigStore>) {
     let mut config = config_store.config_mut::<AutoNavVizGizmoConfigGroup>().1;
+    // e.g.
     config.drawing_mode = AutoNavVizDrawMode::EnabledForAll;
 }
 ```
+
+## Limitations
+Currently, this plugin does not nicely visualize navigation between UI nodes that overlap. Any ideas are welcome -- comment in the GitHub issue about it!
 
 ## License
 This project is dual-licensed under
@@ -34,3 +38,10 @@ This project is dual-licensed under
 - Apache License Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or https://www.apache.org/licenses/LICENSE-2.0)
 
 at your discretion.
+
+## Contributing
+Code contributions are welcome. By contributing, you agree to license your work under the Apache License Version 2.0.
+
+No AI contributions allowed.
+
+Feel free to open any issues on GitHub.
