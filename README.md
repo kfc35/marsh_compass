@@ -40,7 +40,7 @@ This project is dual-licensed under
 at your discretion.
 
 ## Contributing
-Code contributions are welcome. By contributing, you agree to license your work under the Apache License Version 2.0.
+Code contributions are welcome. Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the project by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
 
 No AI contributions allowed.
 
