@@ -84,18 +84,25 @@ pub enum AutoNavVizDrawMode {
     EnabledForAll(SymmetricalEdgeSettings),
 }
 
-/// Setting for how to render symmetrical edges when the whole auto navigation
-/// graph is drawn.
-#[derive(Clone, Copy, Debug, Reflect, PartialEq)]
+/// Setting for how to render symmetrical navigation edges when the
+/// whole auto navigation graph is drawn.
+#[derive(Clone, Copy, Debug, Default, Reflect, PartialEq)]
 pub enum SymmetricalEdgeSettings {
+    /// Merge the two single ended arrows into one drawn double ended arrow.
+    /// The color of the merged arrow is a gradient between the colors that
+    /// the arrows would have had as single arrows. The color of the single arrow
+    /// shows closer to its source entity.
+    #[default]
+    MergeAndGradient,
+
     /// Merge the two single ended arrows into one drawn double ended arrow.
     /// The f32 provided is the mixing factor between the colors of the two single ended arrows.
     /// It should be a number between 0.0 and 1.0 as defined by [`Color::mix`], where "this color"
     /// refers to the color of the arrow from the source entity to the destination entity.
-    MergeIntoDoubleEnded(f32),
+    MergeAndMix(f32),
 
     /// Draw two single ended arrows with spacing inbetween the arrows.
-    /// The spacing is automatically calculated by the length and height of the notes.
+    /// The spacing is automatically calculated by the length and height of the entities.
     SpacingBetweenSingleArrows,
 
     /// Draw two single ended arrows that are simply drawn over each other.
@@ -103,10 +110,16 @@ pub enum SymmetricalEdgeSettings {
     OverlappingSingleArrows,
 }
 
-impl Default for SymmetricalEdgeSettings {
-    fn default() -> Self {
-        // Merge the two single ended arrows, mixing their colors equally.
-        Self::MergeIntoDoubleEnded(0.5)
+impl SymmetricalEdgeSettings {
+    /// Returns [`SymmetricalEdgeSettings::MergeAndMix`] with a mix factor of 0.5
+    /// (equal mixing of the colors of the two individual arrows)
+    pub fn merge_and_mix_evenly() -> Self {
+        Self::MergeAndMix(0.5)
+    }
+
+    /// Returns whether this `SymmetricalEdgeSettings` is a Merge* variant.
+    pub fn is_merge(&self) -> bool {
+        matches!(self, Self::MergeAndGradient | Self::MergeAndMix(_))
     }
 }
 
@@ -124,6 +137,14 @@ pub enum AutoNavVizColorMode {
     MixWithEntity(f32),
     #[default]
     NoMix,
+}
+
+impl AutoNavVizColorMode {
+    /// Returns [`AutoNavVizColorMode::MixWithEntity`] with a mix factor of 0.5
+    /// (equal mixing of the entity's color and the direction)
+    pub fn mix_with_entity_evenly() -> Self {
+        Self::MixWithEntity(0.5)
+    }
 }
 
 /// The [`GizmoConfigGroup`] for the auto navigation visualizations
@@ -257,5 +278,23 @@ impl AutoNavVizGizmoConfigGroup {
         self.south_west_color = default.south_west_color;
         self.west_color = default.west_color;
         self.north_west_color = default.north_west_color;
+    }
+
+    /// Gets the color of the arrow given the source entity and the direction of navigation.
+    /// They will be mixed depending on how the color mode is configured.
+    pub fn get_color_for_entity_and_direction(
+        &self,
+        entity_color: Color,
+        dir: CompassOctant,
+    ) -> Color {
+        self.get_color_for_direction(dir)
+            .map(|color| {
+                if let AutoNavVizColorMode::MixWithEntity(factor) = self.color_mode {
+                    color.mix(&entity_color, factor)
+                } else {
+                    color
+                }
+            })
+            .unwrap_or(entity_color)
     }
 }

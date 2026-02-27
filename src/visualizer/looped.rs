@@ -10,26 +10,26 @@ use crate::{DrawArcData, DrawLineData, DrawLineType, DrawLoopedLineData, NavVizD
 ///
 /// `start_line_is_arrow` will determine whether the line from the start arc back to the
 /// source entity will be an arrow or a plain line.
-/// if `maybe_arc_join_line_color` is `Some(Color)``, the line between the start arc and the
-/// end arc will be the given color. If `None`, it will be a gradient between `from_color` and
-/// `to_color`.
+/// if `override_color` is `Some(Color)`, the draw data will be that color.
+/// If `None`, it will be a gradient between `from_color` and `to_color`.
 pub(crate) fn new_looped_draw_data(
     (start_point, from_size, start_point_dir, from_color): (Vec2, Vec2, CompassOctant, Color),
     (end_point, to_size, end_point_dir, to_color): (Vec2, Vec2, CompassOctant, Color),
     start_line_is_arrow: bool,
-    maybe_arc_join_line_color: Option<Color>,
+    override_color: Option<Color>,
 ) -> NavVizDrawData {
     let start_line_line_type = if start_line_is_arrow {
         DrawLineType::Arrow
     } else {
-        DrawLineType::Line
+        // The line should not be drawn with a gradient.
+        DrawLineType::Line(None)
     };
     let (start_line, start_arc, line_start) = calculate_arc(
         start_point,
         from_size,
         start_point_dir,
         false,
-        from_color,
+        override_color.unwrap_or(from_color),
         start_line_line_type,
     );
     // The ending arc should always end in an arrow
@@ -38,24 +38,15 @@ pub(crate) fn new_looped_draw_data(
         to_size,
         end_point_dir,
         true,
-        to_color,
+        override_color.unwrap_or(to_color),
         DrawLineType::Arrow,
     );
-    let line_between_arcs = if let Some(mid_color) = maybe_arc_join_line_color {
-        DrawLineData {
-            start: line_start,
-            end: line_end,
-            color: mid_color,
-            line_type: DrawLineType::Line,
-        }
-    } else {
-        // TODO gradient
-        DrawLineData {
-            start: line_start,
-            end: line_end,
-            color: from_color,
-            line_type: DrawLineType::Line,
-        }
+    let line_between_arcs = DrawLineData {
+        start: line_start,
+        end: line_end,
+        color: override_color.unwrap_or(from_color),
+        // If an override was provided, set to None, otherwise to_color
+        line_type: DrawLineType::Line(override_color.map_or_else(|| Some(to_color), |_| None)),
     };
     NavVizDrawData::Looped(DrawLoopedLineData {
         start_arc,

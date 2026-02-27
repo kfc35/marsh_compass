@@ -3,10 +3,7 @@ use bevy::input_focus::{InputFocus, directional_navigation::NavNeighbors};
 use bevy::math::CompassOctant;
 use bevy::prelude::*;
 
-use crate::{
-    AutoNavVizColorMode, AutoNavVizDrawMode, AutoNavVizGizmoConfigGroup, NavVizMap,
-    SymmetricalEdgeSettings,
-};
+use crate::{AutoNavVizDrawMode, AutoNavVizGizmoConfigGroup, NavVizMap, SymmetricalEdgeSettings};
 
 mod looped;
 
@@ -74,7 +71,7 @@ pub fn draw_nav_viz(
             // We should only draw the edge once.
             if nav_edge_is_symmetrical
                 && let AutoNavVizDrawMode::EnabledForAll(symm_edge_settings) = config.drawing_mode
-                && let SymmetricalEdgeSettings::MergeIntoDoubleEnded(_) = symm_edge_settings
+                && symm_edge_settings.is_merge()
                 && processed_entities.contains(neighbor)
             {
                 continue;
@@ -133,17 +130,12 @@ fn get_nav_viz_draw_data(
         end_dir = end_dir.opposite();
         end = get_position_in_direction(to_pos, to_size, end_dir);
     }
-    let mut color = config
-        .get_color_for_direction(dir)
-        .map(|color| {
-            if let AutoNavVizColorMode::MixWithEntity(factor) = config.color_mode {
-                color.mix(&from_color, factor)
-            } else {
-                color
-            }
-        })
-        .unwrap_or(from_color);
+
     let mut line_type = DrawLineType::Arrow;
+    let start_color = config.get_color_for_entity_and_direction(from_color, dir);
+    // Assume they should be colored the same
+    let mut end_color = start_color;
+    let mut override_color = None;
 
     if is_symmetrical
         && let AutoNavVizDrawMode::EnabledForAll(symm_edge_settings) = config.drawing_mode
@@ -207,21 +199,14 @@ fn get_nav_viz_draw_data(
             }
         }
 
-        if let SymmetricalEdgeSettings::MergeIntoDoubleEnded(merge_color_factor) =
-            symm_edge_settings
-        {
-            let reverse_color = config
-                .get_color_for_direction(dir.opposite())
-                .map(|color| {
-                    if let AutoNavVizColorMode::MixWithEntity(factor) = config.color_mode {
-                        color.mix(&to_color, factor)
-                    } else {
-                        color
-                    }
-                })
-                .unwrap_or(to_color);
-            color = color.mix(&reverse_color, merge_color_factor);
+        if symm_edge_settings.is_merge() {
+            // Update the `end_color` to what the opposite arrow would have been colored.
+            end_color = config.get_color_for_entity_and_direction(to_color, end_dir);
             line_type = DrawLineType::DoubleEndedArrow;
+            if let SymmetricalEdgeSettings::MergeAndMix(merge_color_factor) = symm_edge_settings {
+                // The whole edge should be colored this override, a mix of both colors.
+                override_color = Some(start_color.mix(&end_color, merge_color_factor));
+            }
         }
     }
 
@@ -231,16 +216,17 @@ fn get_nav_viz_draw_data(
         let start_line_is_arrow = line_type == DrawLineType::DoubleEndedArrow;
 
         looped::new_looped_draw_data(
-            (start, from_size, dir, color),
-            (end, to_size, end_dir, color),
+            (start, from_size, dir, start_color),
+            (end, to_size, end_dir, end_color),
             start_line_is_arrow,
-            Some(color),
+            override_color,
         )
     } else {
+        // TODO gradients.
         NavVizDrawData::Straight(DrawLineData {
             start,
             end,
-            color,
+            color: start_color,
             line_type,
         })
     }
@@ -295,8 +281,12 @@ fn draw_line(
     line_data: &DrawLineData,
 ) {
     match line_data.line_type {
-        DrawLineType::Line => {
-            gizmos.line_2d(line_data.start, line_data.end, line_data.color);
+        DrawLineType::Line(maybe_color) => {
+            if let Some(end_color) = maybe_color {
+                gizmos.line_gradient_2d(line_data.start, line_data.end, line_data.color, end_color);
+            } else {
+                gizmos.line_2d(line_data.start, line_data.end, line_data.color);
+            }
         }
         DrawLineType::Arrow => {
             gizmos
@@ -360,6 +350,9 @@ pub(crate) struct DrawLineData {
     line_type: DrawLineType,
     start: Vec2,
     end: Vec2,
+    /// Color of the line. If [`DrawLineType`] is [`DrawLineType::Line`] with
+    /// an additional line color, this `color` field will be used as the
+    /// start_color for `line_gradient_2d`
     color: Color,
 }
 
@@ -367,7 +360,10 @@ pub(crate) struct DrawLineData {
 /// be drawn as a Line, Arrow, or a Double Ended Arrow
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) enum DrawLineType {
-    Line,
+    /// Used to represent a line. If a color is provided, this line
+    /// will be drawn with a gradient via `line_gradient_2d`, using
+    /// the given Some(color) as the end_color.
+    Line(Option<Color>),
     Arrow,
     DoubleEndedArrow,
 }
