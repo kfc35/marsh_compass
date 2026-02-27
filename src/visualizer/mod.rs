@@ -1,7 +1,7 @@
 use bevy::ecs::entity::{EntityHashMap, EntityHashSet};
 use bevy::input_focus::{InputFocus, directional_navigation::NavNeighbors};
 use bevy::math::CompassOctant;
-use bevy::platform::collections::HashMap;
+use bevy::platform::collections::{HashMap, HashSet};
 use bevy::prelude::*;
 
 use crate::{AutoNavVizDrawMode, AutoNavVizGizmoConfigGroup, NavVizMap, SymmetricalEdgeSettings};
@@ -17,7 +17,8 @@ pub fn draw_nav_viz(
     mut gizmos: Gizmos<AutoNavVizGizmoConfigGroup>,
     mut processed_entities: Local<EntityHashSet>,
     mut entity_to_color: Local<EntityHashMap<Color>>,
-    mut straight_edge_map: Local<HashMap<NavVizDrawMetaData, NavVizDrawData>>,
+    mut processed_assym_straight_edges: Local<HashSet<NavVizDrawMetaData>>,
+    mut assym_straight_edge_map: Local<HashMap<NavVizDrawMetaData, [DrawLineData; 3]>>,
 ) {
     let config = config_store.config::<AutoNavVizGizmoConfigGroup>().1;
     let entries_to_draw_nav = match config.drawing_mode {
@@ -44,7 +45,7 @@ pub fn draw_nav_viz(
     };
 
     processed_entities.clear();
-    straight_edge_map.clear();
+    assym_straight_edge_map.clear();
     for (entity, neighbors) in entries_to_draw_nav.into_iter() {
         let from_color = *entity_to_color
             .entry(*entity)
@@ -96,43 +97,126 @@ pub fn draw_nav_viz(
                 nav_edge_is_symmetrical,
                 config,
             );
-            if let NavVizDrawData::Looped(loop_around_data) = nav_viz_draw_data {
-                gizmos.arc_2d(
-                    loop_around_data.start_arc.isometry,
-                    loop_around_data.start_arc.arc_angle,
-                    loop_around_data.start_arc.radius,
-                    loop_around_data.start_arc.color,
-                );
-                gizmos.arc_2d(
-                    loop_around_data.end_arc.isometry,
-                    loop_around_data.end_arc.arc_angle,
-                    loop_around_data.end_arc.radius,
-                    loop_around_data.end_arc.color,
-                );
-                for line_data in loop_around_data.line_data {
-                    draw_line(&mut gizmos, config, &line_data);
+            match nav_viz_draw_data {
+                NavVizDrawData::Looped(loop_around_data) => {
+                    gizmos.arc_2d(
+                        loop_around_data.start_arc.isometry,
+                        loop_around_data.start_arc.arc_angle,
+                        loop_around_data.start_arc.radius,
+                        loop_around_data.start_arc.color,
+                    );
+                    gizmos.arc_2d(
+                        loop_around_data.end_arc.isometry,
+                        loop_around_data.end_arc.arc_angle,
+                        loop_around_data.end_arc.radius,
+                        loop_around_data.end_arc.color,
+                    );
+                    for line_data in loop_around_data.line_data {
+                        draw_line(&mut gizmos, config, &line_data);
+                    }
                 }
-            } else {
-                // TODO we need the neighbor's dir here
-                straight_edge_map.insert(nav_viz_meta_data, nav_viz_draw_data);
+                NavVizDrawData::ShortStraight(line_data) => {
+                    for line_data in line_data {
+                        draw_line(&mut gizmos, config, &line_data);
+                    }
+                }
+                NavVizDrawData::Straight(line_data) => {
+                    if !nav_edge_is_symmetrical {
+                        // Add to the assym_straight_edge_map for further merging.
+                        assym_straight_edge_map.insert(nav_viz_meta_data, line_data);
+                    } else {
+                        for line_data in line_data {
+                            draw_line(&mut gizmos, config, &line_data);
+                        }
+                    }
+                }
             }
         }
         processed_entities.insert(*entity);
     }
 
-    // TODO Merge any non looped edges that would be *drawn* symmetrically.
-    // Only need to merge if the symmetric edge setting is not set to overlap.
-    // They are not symmetric in the *navigation* system, but would be drawn
-    // overlapping, and so "appear" symmetric to our eyes due to mirror symmetry.
-    // For example, if between entities A <-> B, there is a NE Nav Edge from A -> B
-    // and a NW Nav Edge from B -> A, there will be an edge *drawn* symmetrically
-    // between A's NE point and B's NW point, but this is *not* considered a
-    // symmetric navigation edge.
-
-    for (_, &edge) in straight_edge_map.iter() {
-        for draw_line_data in edge.get_draw_line_data() {
-            draw_line(&mut gizmos, config, draw_line_data);
+    // Merge any assym straight edges that would be drawn overlapping and
+    // therefore are "visualized" symmetric. This process is only necessary
+    // if the symmetric edge setting is a "merge" setting
+    let edges = if let AutoNavVizDrawMode::EnabledForAll(symm_settings) = config.drawing_mode
+        && symm_settings.is_merge()
+    {
+        processed_assym_straight_edges.clear();
+        let mut edges: Vec<DrawLineData> = Vec::with_capacity(assym_straight_edge_map.len());
+        for (meta_data, &edge) in assym_straight_edge_map.iter() {
+            let opposite_meta_data = meta_data.opposite();
+            if !processed_assym_straight_edges.contains(meta_data)
+                && let Some(&other_edge) = assym_straight_edge_map.get(&opposite_meta_data)
+            {
+                // edge and other are not symmetric in the *navigation* system, but would be drawn
+                // overlapping, and so "appear" symmetric to our eyes due to mirror symmetry.
+                // For example, if between entities A <-> B, there is a NE Nav Edge from A -> B
+                // and a NW Nav Edge from B -> A, there will be an edge *drawn* symmetrically
+                // between A's NE point and B's NW point, but this is *not* considered a
+                // symmetric navigation edge.
+                // In this case, we want to merge the appearance of the edges according to the symm_settings
+                if let SymmetricalEdgeSettings::MergeAndMix(factor) = symm_settings {
+                    let mixed_color = edge[0].color.mix(&other_edge[2].color, factor);
+                    // override the color of the whole edge with the mixed color.
+                    edges.push(DrawLineData {
+                        start: edge[0].start,
+                        end: edge[0].end,
+                        // the segment pointing to the start should be an arrow now that this
+                        // edge will appear symmetrical.
+                        line_type: DrawLineType::Arrow,
+                        color: mixed_color,
+                    });
+                    edges.push(DrawLineData {
+                        start: edge[1].start,
+                        end: edge[1].end,
+                        line_type: DrawLineType::Line(None),
+                        color: mixed_color,
+                    });
+                    edges.push(DrawLineData {
+                        start: edge[2].start,
+                        end: edge[2].end,
+                        line_type: DrawLineType::Arrow,
+                        color: mixed_color,
+                    });
+                } else {
+                    // MergeAndGradient
+                    edges.push(DrawLineData {
+                        start: edge[0].start,
+                        end: edge[0].end,
+                        // the segment pointing to the start should be an arrow now that this
+                        // edge will appear symmetrical.
+                        line_type: DrawLineType::Arrow,
+                        color: edge[0].color,
+                    });
+                    edges.push(DrawLineData {
+                        start: edge[1].start,
+                        end: edge[1].end,
+                        color: edge[0].color,
+                        // Add a gradient to the other color for middle segment.
+                        line_type: DrawLineType::Line(Some(other_edge[0].color)),
+                    });
+                    edges.push(DrawLineData {
+                        start: edge[2].start,
+                        end: edge[2].end,
+                        // Use the coloring from the other_edge
+                        color: other_edge[0].color,
+                        line_type: DrawLineType::Arrow,
+                    });
+                }
+                processed_assym_straight_edges.insert(opposite_meta_data);
+            }
+            processed_assym_straight_edges.insert(*meta_data);
         }
+        edges
+    } else {
+        assym_straight_edge_map
+            .iter()
+            .flat_map(|(_, &edge)| edge)
+            .collect::<Vec<DrawLineData>>()
+    };
+
+    for line_data in edges.iter() {
+        draw_line(&mut gizmos, config, line_data);
     }
 }
 
@@ -381,27 +465,20 @@ pub enum NavVizDrawData {
     /// A navigation edge that connects the two closest points of
     /// two navigation nodes. It is broken up into 3 [`DrawLineData`]
     /// segments to allow for a possible color gradient along the arrow.
+    /// The first entry is an arrow or line towards the source entity.
+    /// The second entry is a line between the source entity's line/arrow and the destination entity's arrow
+    /// The third entry is an arrow towards the destination entity.
     Straight([DrawLineData; 3]),
 
     /// A navigation edge that connects the two closest points of
     /// two navigation nodes. It is too short to be broken up
-    /// into 3 [`DrawLineData`], so it is just one [`DrawLineData`].
+    /// into 3 [`DrawLineData`], so it is just one [`DrawLineData`]
+    /// representing an arrow or a double ended arrow
     ShortStraight([DrawLineData; 1]),
 
     /// A navigation edge that must loop around its nodes to point to
     /// the farthest points of two navigation nodes.
     Looped(DrawLoopedLineData),
-}
-
-impl NavVizDrawData {
-    /// Returns only the [`DrawLineData`] contained in this draw data.
-    pub(crate) fn get_draw_line_data(&self) -> &[DrawLineData] {
-        match self {
-            NavVizDrawData::Straight(draw_line_data) => draw_line_data,
-            NavVizDrawData::ShortStraight(draw_line_data) => draw_line_data,
-            NavVizDrawData::Looped(draw_looped_line_data) => &draw_looped_line_data.line_data,
-        }
-    }
 }
 
 /// Meta data describing what a [`NavVizDrawData`] connects at a high level.
