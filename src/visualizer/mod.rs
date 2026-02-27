@@ -225,9 +225,10 @@ fn get_nav_viz_draw_data(
             (end, to_size, end_dir, end_color),
             start_line_is_arrow,
             override_color,
+            config,
         )
-    } else if (end - start).length() <= 2. {
-        // too short to accomoddate a possible gradient
+    } else if (end - start).length() <= 2. * config.arrow_tip_length {
+        // too short to accommodate a possible gradient
         NavVizDrawData::ShortStraight(DrawLineData {
             start,
             end,
@@ -235,13 +236,15 @@ fn get_nav_viz_draw_data(
             line_type,
         })
     } else {
-        let source_arrow_start = Into::<Dir2>::into(dir).as_vec2() * 10. + start;
+        let source_arrow_start =
+            Into::<Dir2>::into(dir).as_vec2() * config.arrow_tip_length + start;
         let source_arrow_type = if line_type == DrawLineType::DoubleEndedArrow {
             DrawLineType::Arrow
         } else {
             DrawLineType::Line(None)
         };
-        let destination_arrow_start = Into::<Dir2>::into(end_dir).as_vec2() * 10. + end;
+        let destination_arrow_start =
+            Into::<Dir2>::into(end_dir).as_vec2() * config.arrow_tip_length + end;
         NavVizDrawData::Straight([
             DrawLineData {
                 start: source_arrow_start,

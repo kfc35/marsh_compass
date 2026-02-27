@@ -3,7 +3,10 @@ use core::f32::consts::{FRAC_PI_2, FRAC_PI_4, PI, SQRT_2};
 use bevy::math::CompassOctant;
 use bevy::prelude::*;
 
-use crate::{DrawArcData, DrawLineData, DrawLineType, DrawLoopedLineData, NavVizDrawData};
+use crate::{
+    AutoNavVizGizmoConfigGroup, DrawArcData, DrawLineData, DrawLineType, DrawLoopedLineData,
+    NavVizDrawData,
+};
 
 /// Returns a [`NavVizDrawData`] representing a [`NavVizDrawData::Looped`], a navigation edge
 /// that loops around its start and end.
@@ -17,6 +20,7 @@ pub(crate) fn new_looped_draw_data(
     (end_point, to_size, end_point_dir, to_color): (Vec2, Vec2, CompassOctant, Color),
     start_line_is_arrow: bool,
     override_color: Option<Color>,
+    config: &AutoNavVizGizmoConfigGroup,
 ) -> NavVizDrawData {
     let start_line_line_type = if start_line_is_arrow {
         DrawLineType::Arrow
@@ -31,6 +35,7 @@ pub(crate) fn new_looped_draw_data(
         false,
         override_color.unwrap_or(from_color),
         start_line_line_type,
+        config,
     );
     // The ending arc should always end in an arrow
     let (end_line, end_arc, line_end) = calculate_arc(
@@ -40,6 +45,7 @@ pub(crate) fn new_looped_draw_data(
         true,
         override_color.unwrap_or(to_color),
         DrawLineType::Arrow,
+        config,
     );
     let line_between_arcs = DrawLineData {
         start: line_start,
@@ -84,11 +90,12 @@ pub(crate) fn calculate_arc(
     mirror: bool,
     color: Color,
     line_type: DrawLineType,
+    config: &AutoNavVizGizmoConfigGroup,
 ) -> (DrawLineData, DrawArcData, Vec2) {
     // line_start is also the starting point of the arc.
     // This logic also pushes the arc to be drawn further out from the node.
     // It looks a little awkward when drawn too close.
-    let line_start = Into::<Dir2>::into(dir_of_point).as_vec2() * 10. + point;
+    let line_start = Into::<Dir2>::into(dir_of_point).as_vec2() * config.arrow_tip_length + point;
     let draw_line_data = DrawLineData {
         start: line_start,
         end: point,

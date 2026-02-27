@@ -192,11 +192,11 @@ fn update_example(
     }
     if keyboard.pressed(Key::Character("w".into())) {
         group_config.arrow_tip_length += 5. * real_time.delta_secs();
-        group_config.arrow_tip_length = group_config.arrow_tip_length.clamp(0., 50.);
+        group_config.arrow_tip_length = group_config.arrow_tip_length.clamp(0., 25.);
     }
     if keyboard.pressed(Key::Character("s".into())) {
         group_config.arrow_tip_length -= 5. * real_time.delta_secs();
-        group_config.arrow_tip_length = group_config.arrow_tip_length.clamp(0., 50.);
+        group_config.arrow_tip_length = group_config.arrow_tip_length.clamp(0., 25.);
     }
 
     // update example
