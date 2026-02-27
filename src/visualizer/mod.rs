@@ -1,6 +1,7 @@
 use bevy::ecs::entity::{EntityHashMap, EntityHashSet};
 use bevy::input_focus::{InputFocus, directional_navigation::NavNeighbors};
 use bevy::math::CompassOctant;
+use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 
 use crate::{AutoNavVizDrawMode, AutoNavVizGizmoConfigGroup, NavVizMap, SymmetricalEdgeSettings};
@@ -16,6 +17,7 @@ pub fn draw_nav_viz(
     mut gizmos: Gizmos<AutoNavVizGizmoConfigGroup>,
     mut processed_entities: Local<EntityHashSet>,
     mut entity_to_color: Local<EntityHashMap<Color>>,
+    mut straight_edge_map: Local<HashMap<NavVizDrawMetaData, NavVizDrawData>>,
 ) {
     let config = config_store.config::<AutoNavVizGizmoConfigGroup>().1;
     let entries_to_draw_nav = match config.drawing_mode {
@@ -42,6 +44,7 @@ pub fn draw_nav_viz(
     };
 
     processed_entities.clear();
+    straight_edge_map.clear();
     for (entity, neighbors) in entries_to_draw_nav.into_iter() {
         let from_color = *entity_to_color
             .entry(*entity)
@@ -86,39 +89,32 @@ pub fn draw_nav_viz(
                 .entry(*neighbor)
                 .or_insert(Oklcha::sequential_dispersed(neighbor.index_u32()).into());
 
-            let nav_viz_draw_data = get_nav_viz_draw_data(
-                (from_pos, from_size, from_color),
+            let (nav_viz_meta_data, nav_viz_draw_data) = get_nav_viz_draw_data(
+                (*entity, from_pos, from_size, from_color),
                 dir,
-                (to_pos, to_size, to_color),
+                (*neighbor, to_pos, to_size, to_color),
                 nav_edge_is_symmetrical,
                 config,
             );
-            match nav_viz_draw_data {
-                NavVizDrawData::ShortStraight(line_data) => {
+            if let NavVizDrawData::Looped(loop_around_data) = nav_viz_draw_data {
+                gizmos.arc_2d(
+                    loop_around_data.start_arc.isometry,
+                    loop_around_data.start_arc.arc_angle,
+                    loop_around_data.start_arc.radius,
+                    loop_around_data.start_arc.color,
+                );
+                gizmos.arc_2d(
+                    loop_around_data.end_arc.isometry,
+                    loop_around_data.end_arc.arc_angle,
+                    loop_around_data.end_arc.radius,
+                    loop_around_data.end_arc.color,
+                );
+                for line_data in loop_around_data.line_data {
                     draw_line(&mut gizmos, config, &line_data);
                 }
-                NavVizDrawData::Straight(line_data) => {
-                    for line_data in line_data {
-                        draw_line(&mut gizmos, config, &line_data);
-                    }
-                }
-                NavVizDrawData::Looped(loop_around_data) => {
-                    gizmos.arc_2d(
-                        loop_around_data.start_arc.isometry,
-                        loop_around_data.start_arc.arc_angle,
-                        loop_around_data.start_arc.radius,
-                        loop_around_data.start_arc.color,
-                    );
-                    gizmos.arc_2d(
-                        loop_around_data.end_arc.isometry,
-                        loop_around_data.end_arc.arc_angle,
-                        loop_around_data.end_arc.radius,
-                        loop_around_data.end_arc.color,
-                    );
-                    for line_data in loop_around_data.line_data {
-                        draw_line(&mut gizmos, config, &line_data);
-                    }
-                }
+            } else {
+                // TODO we need the neighbor's dir here
+                straight_edge_map.insert(nav_viz_meta_data, nav_viz_draw_data);
             }
         }
         processed_entities.insert(*entity);
@@ -132,15 +128,21 @@ pub fn draw_nav_viz(
     // and a NW Nav Edge from B -> A, there will be an edge *drawn* symmetrically
     // between A's NE point and B's NW point, but this is *not* considered a
     // symmetric navigation edge.
+
+    for (_, &edge) in straight_edge_map.iter() {
+        for draw_line_data in edge.get_draw_line_data() {
+            draw_line(&mut gizmos, config, draw_line_data);
+        }
+    }
 }
 
 fn get_nav_viz_draw_data(
-    (from_pos, from_size, from_color): (Vec2, Vec2, Color),
+    (from_entity, from_pos, from_size, from_color): (Entity, Vec2, Vec2, Color),
     dir: CompassOctant,
-    (to_pos, to_size, to_color): (Vec2, Vec2, Color),
+    (to_entity, to_pos, to_size, to_color): (Entity, Vec2, Vec2, Color),
     is_symmetrical: bool,
     config: &AutoNavVizGizmoConfigGroup,
-) -> NavVizDrawData {
+) -> (NavVizDrawMetaData, NavVizDrawData) {
     let mut start = get_position_in_direction(from_pos, from_size, dir);
     let (mut end, mut end_dir) = get_closest_point(to_pos, to_size, start);
     let arrow_must_reverse = !dir.is_in_direction(start, end);
@@ -230,26 +232,38 @@ fn get_nav_viz_draw_data(
         }
     }
 
+    let meta_data = NavVizDrawMetaData {
+        source_entity: from_entity,
+        source_direction: dir,
+        destination_entity: to_entity,
+        destination_direction: end_dir,
+    };
     if arrow_must_reverse {
         // If we must draw a double ended arrow, the line drawn from the start arc to the source entity should
         // have an arrow head facing towards the source entity.
         let start_line_is_arrow = line_type == DrawLineType::DoubleEndedArrow;
 
-        looped::new_looped_draw_data(
-            (start, from_size, dir, start_color),
-            (end, to_size, end_dir, end_color),
-            start_line_is_arrow,
-            override_color,
-            config,
+        (
+            meta_data,
+            looped::new_looped_draw_data(
+                (start, from_size, dir, start_color),
+                (end, to_size, end_dir, end_color),
+                start_line_is_arrow,
+                override_color,
+                config,
+            ),
         )
     } else if (end - start).length() <= 2. * config.arrow_tip_length {
         // too short to accommodate a line gradient
-        NavVizDrawData::ShortStraight(DrawLineData {
-            start,
-            end,
-            color: start_color,
-            line_type,
-        })
+        (
+            meta_data,
+            NavVizDrawData::ShortStraight([DrawLineData {
+                start,
+                end,
+                color: start_color,
+                line_type,
+            }]),
+        )
     } else {
         // The direction is multiplied by arrow_tip_length because the arrow tip
         // looks most natural when tip length is proportional to the arrow's length itself.
@@ -262,29 +276,32 @@ fn get_nav_viz_draw_data(
         };
         let destination_arrow_start =
             Into::<Dir2>::into(end_dir).as_vec2() * config.arrow_tip_length + end;
-        NavVizDrawData::Straight([
-            DrawLineData {
-                start: source_arrow_start,
-                end: start,
-                color: override_color.unwrap_or(start_color),
-                line_type: source_arrow_type,
-            },
-            DrawLineData {
-                start: source_arrow_start,
-                end: destination_arrow_start,
-                color: override_color.unwrap_or(start_color),
-                // If an override was provided, set to None, otherwise to_color
-                line_type: DrawLineType::Line(
-                    override_color.map_or_else(|| Some(end_color), |_| None),
-                ),
-            },
-            DrawLineData {
-                start: destination_arrow_start,
-                end,
-                color: override_color.unwrap_or(end_color),
-                line_type: DrawLineType::Arrow,
-            },
-        ])
+        (
+            meta_data,
+            NavVizDrawData::Straight([
+                DrawLineData {
+                    start: source_arrow_start,
+                    end: start,
+                    color: override_color.unwrap_or(start_color),
+                    line_type: source_arrow_type,
+                },
+                DrawLineData {
+                    start: source_arrow_start,
+                    end: destination_arrow_start,
+                    color: override_color.unwrap_or(start_color),
+                    // If an override was provided, set to None, otherwise to_color
+                    line_type: DrawLineType::Line(
+                        override_color.map_or_else(|| Some(end_color), |_| None),
+                    ),
+                },
+                DrawLineData {
+                    start: destination_arrow_start,
+                    end,
+                    color: override_color.unwrap_or(end_color),
+                    line_type: DrawLineType::Arrow,
+                },
+            ]),
+        )
     }
 }
 
@@ -360,7 +377,7 @@ fn draw_line(
 
 /// A unit of draw data representing a navigation edge.
 #[derive(Clone, Copy, PartialEq)]
-pub(crate) enum NavVizDrawData {
+pub enum NavVizDrawData {
     /// A navigation edge that connects the two closest points of
     /// two navigation nodes. It is broken up into 3 [`DrawLineData`]
     /// segments to allow for a possible color gradient along the arrow.
@@ -369,11 +386,48 @@ pub(crate) enum NavVizDrawData {
     /// A navigation edge that connects the two closest points of
     /// two navigation nodes. It is too short to be broken up
     /// into 3 [`DrawLineData`], so it is just one [`DrawLineData`].
-    ShortStraight(DrawLineData),
+    ShortStraight([DrawLineData; 1]),
 
     /// A navigation edge that must loop around its nodes to point to
     /// the farthest points of two navigation nodes.
     Looped(DrawLoopedLineData),
+}
+
+impl NavVizDrawData {
+    /// Returns only the [`DrawLineData`] contained in this draw data.
+    pub(crate) fn get_draw_line_data(&self) -> &[DrawLineData] {
+        match self {
+            NavVizDrawData::Straight(draw_line_data) => draw_line_data,
+            NavVizDrawData::ShortStraight(draw_line_data) => draw_line_data,
+            NavVizDrawData::Looped(draw_looped_line_data) => &draw_looped_line_data.line_data,
+        }
+    }
+}
+
+/// Meta data describing what a [`NavVizDrawData`] connects at a high level.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct NavVizDrawMetaData {
+    pub source_entity: Entity,
+    // The direction from which the visualization starts at the source entity
+    pub source_direction: CompassOctant,
+    pub destination_entity: Entity,
+    // The direction to which the visualization ends on the destination entity.
+    // i.e. SouthEast means that the arrow points towards the SE corner of the
+    // destination entity.
+    pub destination_direction: CompassOctant,
+}
+
+impl NavVizDrawMetaData {
+    /// Returns the meta data for the hypothetical opposite edge compared
+    /// to this one (i.e. the source and destination fields switch values).
+    pub fn opposite(&self) -> Self {
+        NavVizDrawMetaData {
+            source_entity: self.destination_entity,
+            source_direction: self.destination_direction,
+            destination_entity: self.source_entity,
+            destination_direction: self.source_direction,
+        }
+    }
 }
 
 /// A struct containing multiple draw elements that, when composed,
@@ -381,7 +435,7 @@ pub(crate) enum NavVizDrawData {
 /// navigation edge, a "looped" edge hooks around its start and
 /// destination nodes to point to/from their farthest points.
 #[derive(Clone, Copy, PartialEq)]
-pub(crate) struct DrawLoopedLineData {
+pub struct DrawLoopedLineData {
     /// The arc (semi-circle) drawn near the source node.
     start_arc: DrawArcData,
 
@@ -398,7 +452,7 @@ pub(crate) struct DrawLoopedLineData {
 /// A struct containing necessary information to draw an arc
 /// via [`Gizmos`].
 #[derive(Clone, Copy, PartialEq)]
-pub(crate) struct DrawArcData {
+pub struct DrawArcData {
     isometry: Isometry2d,
     arc_angle: f32,
     radius: f32,
@@ -408,7 +462,7 @@ pub(crate) struct DrawArcData {
 /// A struct containing necessary information to draw a line/arrow
 /// via [`Gizmos`].
 #[derive(Clone, Copy, PartialEq)]
-pub(crate) struct DrawLineData {
+pub struct DrawLineData {
     line_type: DrawLineType,
     start: Vec2,
     end: Vec2,
@@ -421,7 +475,7 @@ pub(crate) struct DrawLineData {
 /// An enum used by [`DrawLineData`] to denote whether the line should
 /// be drawn as a Line, Arrow, or a Double Ended Arrow
 #[derive(Clone, Copy, PartialEq)]
-pub(crate) enum DrawLineType {
+pub enum DrawLineType {
     /// Used to represent a line. If a color is provided, this line
     /// will be drawn with a gradient via `line_gradient_2d`, using
     /// the given Some(color) as the end_color.

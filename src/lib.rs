@@ -90,8 +90,8 @@ pub enum AutoNavVizDrawMode {
 pub enum SymmetricalEdgeSettings {
     /// Merge the two single ended arrows into one drawn double ended arrow.
     /// The color of the merged arrow is a gradient between the colors that
-    /// the arrows would have had as single arrows. The color of the single arrow
-    /// shows closer to its source entity.
+    /// the arrows would have had as single arrows. The color of these single arrow
+    /// is more prominent closer to their respective source entity in the combined arrow.
     #[default]
     MergeAndGradient,
 
@@ -252,8 +252,8 @@ impl Default for AutoNavVizGizmoConfigGroup {
             // Light Green
             north_west_color: Some(Color::Srgba(Srgba::new(0.33, 1.0, 0., 0.8))),
 
-            // Black
-            default_color: Color::Srgba(Srgba::BLACK),
+            // White
+            default_color: Color::Srgba(Srgba::WHITE),
         }
     }
 }
