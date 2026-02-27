@@ -88,8 +88,13 @@ pub fn draw_nav_viz(
                 config,
             );
             match nav_viz_draw_data {
-                NavVizDrawData::Straight(line_data) => {
+                NavVizDrawData::ShortStraight(line_data) => {
                     draw_line(&mut gizmos, config, &line_data);
+                }
+                NavVizDrawData::Straight(line_data) => {
+                    for line_data in line_data {
+                        draw_line(&mut gizmos, config, &line_data);
+                    }
                 }
                 NavVizDrawData::Looped(loop_around_data) => {
                     gizmos.arc_2d(
@@ -221,14 +226,45 @@ fn get_nav_viz_draw_data(
             start_line_is_arrow,
             override_color,
         )
-    } else {
-        // TODO gradients.
-        NavVizDrawData::Straight(DrawLineData {
+    } else if (end - start).length() <= 2. {
+        // too short to accomoddate a possible gradient
+        NavVizDrawData::ShortStraight(DrawLineData {
             start,
             end,
             color: start_color,
             line_type,
         })
+    } else {
+        let source_arrow_start = Into::<Dir2>::into(dir).as_vec2() * 10. + start;
+        let source_arrow_type = if line_type == DrawLineType::DoubleEndedArrow {
+            DrawLineType::Arrow
+        } else {
+            DrawLineType::Line(None)
+        };
+        let destination_arrow_start = Into::<Dir2>::into(end_dir).as_vec2() * 10. + end;
+        NavVizDrawData::Straight([
+            DrawLineData {
+                start: source_arrow_start,
+                end: start,
+                color: override_color.unwrap_or(start_color),
+                line_type: source_arrow_type,
+            },
+            DrawLineData {
+                start: source_arrow_start,
+                end: destination_arrow_start,
+                color: override_color.unwrap_or(start_color),
+                // If an override was provided, set to None, otherwise to_color
+                line_type: DrawLineType::Line(
+                    override_color.map_or_else(|| Some(end_color), |_| None),
+                ),
+            },
+            DrawLineData {
+                start: destination_arrow_start,
+                end,
+                color: override_color.unwrap_or(end_color),
+                line_type: DrawLineType::Arrow,
+            },
+        ])
     }
 }
 
@@ -306,8 +342,14 @@ fn draw_line(
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) enum NavVizDrawData {
     /// A navigation edge that connects the two closest points of
-    /// two navigation nodes
-    Straight(DrawLineData),
+    /// two navigation nodes. It is broken up into 3 [`DrawLineData`]
+    /// segments to allow for a possible color gradient along the arrow.
+    Straight([DrawLineData; 3]),
+
+    /// A navigation edge that connects the two closest points of
+    /// two navigation nodes. It is too short to be broken up
+    /// into 3 [`DrawLineData`], so it is just one DrawLineData.
+    ShortStraight(DrawLineData),
 
     /// A navigation edge that must loop around its nodes to point to
     /// the farthest points of two navigation nodes.
