@@ -117,6 +117,15 @@ pub fn draw_nav_viz(
         }
         processed_entities.insert(*entity);
     }
+
+    // TODO Merge any non looped edges that would be *drawn* symmetrically.
+    // Only need to merge if the symmetric edge setting is not set to overlap.
+    // They are not symmetric in the *navigation* system, but would be drawn
+    // overlapping, and so "appear" symmetric to our eyes due to mirror symmetry.
+    // For example, if between entities A <-> B, there is a NE Nav Edge from A -> B
+    // and a NW Nav Edge from B -> A, there will be an edge *drawn* symmetrically
+    // between A's NE point and B's NW point, but this is *not* considered a
+    // symmetric navigation edge.
 }
 
 fn get_nav_viz_draw_data(
@@ -228,7 +237,7 @@ fn get_nav_viz_draw_data(
             config,
         )
     } else if (end - start).length() <= 2. * config.arrow_tip_length {
-        // too short to accommodate a possible gradient
+        // too short to accommodate a line gradient
         NavVizDrawData::ShortStraight(DrawLineData {
             start,
             end,
@@ -236,6 +245,8 @@ fn get_nav_viz_draw_data(
             line_type,
         })
     } else {
+        // The direction is multiplied by arrow_tip_length because the arrow tip
+        // looks most natural when tip length is proportional to the arrow's length itself.
         let source_arrow_start =
             Into::<Dir2>::into(dir).as_vec2() * config.arrow_tip_length + start;
         let source_arrow_type = if line_type == DrawLineType::DoubleEndedArrow {

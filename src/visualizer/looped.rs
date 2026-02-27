@@ -95,6 +95,8 @@ pub(crate) fn calculate_arc(
     // line_start is also the starting point of the arc.
     // This logic also pushes the arc to be drawn further out from the node.
     // It looks a little awkward when drawn too close.
+    // The direction is multiplied by arrow_tip_length because the arrow tip
+    // looks most natural when tip length is proportional to the arrow's length itself.
     let line_start = Into::<Dir2>::into(dir_of_point).as_vec2() * config.arrow_tip_length + point;
     let draw_line_data = DrawLineData {
         start: line_start,
