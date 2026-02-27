@@ -125,25 +125,48 @@ impl SymmetricalEdgeSettings {
 
 /// Setting for whether the directional colors provided by the [`AutoNavVizGizmoConfigGroup`]
 /// should:
-/// - be mixed with a random color generated uniquely for the source entity, or
+/// - be mixed with a color generated uniquely for the source entity,
+/// - be mixed with a color generated uniquely for the destination entity,
 /// - not be mixed
 ///
 /// The default is not to mix.
 #[derive(Clone, Copy, Debug, Default, Reflect, PartialEq)]
 pub enum AutoNavVizColorMode {
-    /// Mix the color with a random color generated uniquely for the source entity.
+    /// Mix the directional color with a color generated uniquely for the source entity.
     /// The f32 provided is the mixing factor and should be a number between 0.0 and 1.0.
     /// A higher number means that the entity's color is used more.
-    MixWithEntity(f32),
+    MixedWithSourceEntity(f32),
+    /// Mix the directional color with a color generated uniquely for the destination entity.
+    /// The f32 provided is the mixing factor and should be a number between 0.0 and 1.0.
+    /// A higher number means that the entity's color is used more.
+    MixedWithDestinationEntity(f32),
     #[default]
-    NoMix,
+    DirectionalOnly,
 }
 
 impl AutoNavVizColorMode {
-    /// Returns [`AutoNavVizColorMode::MixWithEntity`] with a mix factor of 0.5
+    /// Returns [`AutoNavVizColorMode::MixedWithSourceEntity`] with a mix factor of 0.5
     /// (equal mixing of the entity's color and the direction)
-    pub fn mix_with_entity_evenly() -> Self {
-        Self::MixWithEntity(0.5)
+    pub fn mix_with_source_entity_evenly() -> Self {
+        Self::MixedWithSourceEntity(0.5)
+    }
+
+    /// Returns [`AutoNavVizColorMode::MixedWithSourceEntity`] with a mix factor of 1.0
+    /// (only the source entity's color is used)
+    pub fn source_entity_color_only() -> Self {
+        Self::MixedWithSourceEntity(1.)
+    }
+
+    /// Returns [`AutoNavVizColorMode::MixedWithDestinationEntity`] with a mix factor of 0.5
+    /// (equal mixing of the entity's color and the direction)
+    pub fn mix_with_destination_entity_evenly() -> Self {
+        Self::MixedWithDestinationEntity(0.5)
+    }
+
+    /// Returns [`AutoNavVizColorMode::MixedWithDestinationEntity`] with a mix factor of 1.0
+    /// (only the destination entity's color is used)
+    pub fn destination_entity_color_only() -> Self {
+        Self::MixedWithDestinationEntity(1.)
     }
 }
 
@@ -164,14 +187,14 @@ pub struct AutoNavVizGizmoConfigGroup {
     /// See [`AutoNavVizColorMode`] for more details.
     pub color_mode: AutoNavVizColorMode,
 
-    // TODO only manual edges, only automated edges, or both.
+    // TODO A setting for only manual edges, only automated edges, or both.
     /// Determines the arrow tip length for directional arrow in world coordinates.
     pub arrow_tip_length: f32,
 
     /// A color representing one of the eight [`CompassOctant`] directions
     /// that the auto navigation system uses.
     ///
-    /// If set to None, the random color generated uniquely for the source entity will be used only.
+    /// If set to None, the default directional color `default_color` will be used.
     pub north_color: Option<Color>,
 
     /// Refer to the description of [north_color](AutoNavVizGizmoConfigGroup::north_color).
@@ -194,6 +217,9 @@ pub struct AutoNavVizGizmoConfigGroup {
 
     /// Refer to the description of [north_color](AutoNavVizGizmoConfigGroup::north_color).
     pub north_west_color: Option<Color>,
+
+    /// The default color to be used if a direction's color is set to None.
+    pub default_color: Color,
 }
 
 impl Default for AutoNavVizGizmoConfigGroup {
@@ -225,6 +251,9 @@ impl Default for AutoNavVizGizmoConfigGroup {
 
             // Light Green
             north_west_color: Some(Color::Srgba(Srgba::new(0.33, 1.0, 0., 0.8))),
+
+            // Black
+            default_color: Color::Srgba(Srgba::BLACK),
         }
     }
 }
@@ -241,7 +270,7 @@ impl AutoNavVizGizmoConfigGroup {
     }
 
     /// Returns the color set in this config group for the given direction.
-    pub fn get_color_for_direction(&self, dir: CompassOctant) -> Option<Color> {
+    pub fn get_setting_color_for_direction(&self, dir: CompassOctant) -> Option<Color> {
         match dir {
             CompassOctant::North => self.north_color,
             CompassOctant::NorthEast => self.north_east_color,
@@ -280,21 +309,24 @@ impl AutoNavVizGizmoConfigGroup {
         self.north_west_color = default.north_west_color;
     }
 
-    /// Gets the color of the arrow given the source entity and the direction of navigation.
-    /// They will be mixed depending on how the color mode is configured.
-    pub fn get_color_for_entity_and_direction(
+    /// Gets the color given the source entity's color, destination entity's color,
+    /// and the direction of navigation. They will be mixed depending on how the
+    /// color mode is configured.
+    pub fn get_color_for_direction(
         &self,
-        entity_color: Color,
+        source_color: Color,
+        destination_color: Color,
         dir: CompassOctant,
     ) -> Color {
-        self.get_color_for_direction(dir)
-            .map(|color| {
-                if let AutoNavVizColorMode::MixWithEntity(factor) = self.color_mode {
-                    color.mix(&entity_color, factor)
-                } else {
-                    color
-                }
-            })
-            .unwrap_or(entity_color)
+        let color = self
+            .get_setting_color_for_direction(dir)
+            .unwrap_or(self.default_color);
+        match self.color_mode {
+            AutoNavVizColorMode::MixedWithSourceEntity(factor) => color.mix(&source_color, factor),
+            AutoNavVizColorMode::MixedWithDestinationEntity(factor) => {
+                color.mix(&destination_color, factor)
+            }
+            AutoNavVizColorMode::DirectionalOnly => color,
+        }
     }
 }

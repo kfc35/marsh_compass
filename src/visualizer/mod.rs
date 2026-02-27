@@ -28,11 +28,17 @@ pub fn draw_nav_viz(
                 return;
             }
         }
-        AutoNavVizDrawMode::EnabledForAll(_) => nav_viz_map
-            .map
-            .neighbors
-            .iter()
-            .collect::<Vec<(&Entity, &NavNeighbors)>>(),
+        AutoNavVizDrawMode::EnabledForAll(_) => {
+            // Ensure entries are processed deterministically to avoid
+            // flickering of edges (particularly looping edges)
+            let mut entries = nav_viz_map
+                .map
+                .neighbors
+                .iter()
+                .collect::<Vec<(&Entity, &NavNeighbors)>>();
+            entries.sort_by(|&(&a, _), &(b, _)| a.cmp(b));
+            entries
+        }
     };
 
     processed_entities.clear();
@@ -146,7 +152,7 @@ fn get_nav_viz_draw_data(
     }
 
     let mut line_type = DrawLineType::Arrow;
-    let start_color = config.get_color_for_entity_and_direction(from_color, dir);
+    let start_color = config.get_color_for_direction(from_color, to_color, dir);
     // Assume they should be colored the same
     let mut end_color = start_color;
     let mut override_color = None;
@@ -215,7 +221,7 @@ fn get_nav_viz_draw_data(
 
         if symm_edge_settings.is_merge() {
             // Update the `end_color` to what the opposite arrow would have been colored.
-            end_color = config.get_color_for_entity_and_direction(to_color, end_dir);
+            end_color = config.get_color_for_direction(to_color, from_color, end_dir);
             line_type = DrawLineType::DoubleEndedArrow;
             if let SymmetricalEdgeSettings::MergeAndMix(merge_color_factor) = symm_edge_settings {
                 // The whole edge should be colored this override, a mix of both colors.
@@ -362,7 +368,7 @@ pub(crate) enum NavVizDrawData {
 
     /// A navigation edge that connects the two closest points of
     /// two navigation nodes. It is too short to be broken up
-    /// into 3 [`DrawLineData`], so it is just one DrawLineData.
+    /// into 3 [`DrawLineData`], so it is just one [`DrawLineData`].
     ShortStraight(DrawLineData),
 
     /// A navigation edge that must loop around its nodes to point to

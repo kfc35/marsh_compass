@@ -184,11 +184,25 @@ fn update_example(
         }
     }
     if keyboard.just_pressed(Key::Character("3".into())) {
-        if group_config.color_mode == AutoNavVizColorMode::NoMix {
-            group_config.color_mode = AutoNavVizColorMode::MixWithEntity(0.5);
-        } else {
-            group_config.color_mode = AutoNavVizColorMode::NoMix;
-        }
+        group_config.color_mode = match group_config.color_mode {
+            AutoNavVizColorMode::DirectionalOnly => {
+                AutoNavVizColorMode::mix_with_source_entity_evenly()
+            }
+            AutoNavVizColorMode::MixedWithSourceEntity(factor) => {
+                if factor <= 0.5 {
+                    AutoNavVizColorMode::source_entity_color_only()
+                } else {
+                    AutoNavVizColorMode::mix_with_destination_entity_evenly()
+                }
+            }
+            AutoNavVizColorMode::MixedWithDestinationEntity(factor) => {
+                if factor <= 0.5 {
+                    AutoNavVizColorMode::destination_entity_color_only()
+                } else {
+                    AutoNavVizColorMode::DirectionalOnly
+                }
+            }
+        };
     }
     if keyboard.pressed(Key::Character("w".into())) {
         group_config.arrow_tip_length += 5. * real_time.delta_secs();
