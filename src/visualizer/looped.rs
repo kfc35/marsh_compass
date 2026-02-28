@@ -47,12 +47,16 @@ pub(crate) fn new_looped_draw_data(
         DrawLineType::Arrow,
         config,
     );
+    let gradient_color = if override_color.is_some() {
+        None
+    } else {
+        Some(to_color)
+    };
     let line_between_arcs = DrawLineData {
         start: line_start,
         end: line_end,
         color: override_color.unwrap_or(from_color),
-        // If an override was provided, set to None, otherwise to_color
-        line_type: DrawLineType::Line(override_color.map_or_else(|| Some(to_color), |_| None)),
+        line_type: DrawLineType::Line(gradient_color),
     };
     NavVizDrawData::Looped(DrawLoopedLineData {
         start_arc,

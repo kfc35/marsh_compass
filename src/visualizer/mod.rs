@@ -10,7 +10,7 @@ mod looped;
 
 /// A struct representing a navigation edge's visualization.
 #[derive(Clone, Copy, PartialEq)]
-pub enum NavVizDrawData {
+pub(crate) enum NavVizDrawData {
     /// A navigation edge that connects the two closest points of
     /// two navigation entities. It is broken up into 3 [`DrawLineData`]
     /// segments to allow for a possible color gradient along the arrow.
@@ -61,7 +61,7 @@ impl NavVizDrawMetaData {
 /// navigation edge, a "looped" edge hooks around its start and
 /// destination entities to point to/from their farthest points.
 #[derive(Clone, Copy, PartialEq)]
-pub struct DrawLoopedLineData {
+pub(crate) struct DrawLoopedLineData {
     /// The arc (semi-circle) drawn near the source entity.
     start_arc: DrawArcData,
 
@@ -78,7 +78,7 @@ pub struct DrawLoopedLineData {
 /// A struct containing necessary information to draw an arc
 /// via [`Gizmos`].
 #[derive(Clone, Copy, PartialEq)]
-pub struct DrawArcData {
+pub(crate) struct DrawArcData {
     isometry: Isometry2d,
     arc_angle: f32,
     radius: f32,
@@ -89,13 +89,13 @@ pub struct DrawArcData {
 /// via [`Gizmos`].
 #[derive(Clone, Copy, PartialEq)]
 pub struct DrawLineData {
-    line_type: DrawLineType,
-    start: Vec2,
-    end: Vec2,
+    pub line_type: DrawLineType,
+    pub start: Vec2,
+    pub end: Vec2,
     /// Color of the line. If [`DrawLineType`] is [`DrawLineType::Line`] with
     /// an additional line color, this `color` field will be used as the
     /// start_color for `line_gradient_2d`
-    color: Color,
+    pub color: Color,
 }
 
 /// An enum used by [`DrawLineData`] to denote whether the line should
@@ -239,17 +239,16 @@ pub fn draw_nav_viz(
 
     // Merge any asymmetrical straight edges that would be drawn overlapping and
     // therefore are "visualized" symmetric. This process is only necessary
-    // if the symmetric edge setting is a "merge" setting
-    // TODO what about applying nudge if they should be spaced
-    let edges = if let AutoNavVizDrawMode::EnabledForAll(symm_settings) = config.draw_mode
-        && symm_settings.is_merge()
+    // if the symmetric edge setting is not the overlap setting
+    let edges = if let AutoNavVizDrawMode::EnabledForAll(symm_edge_settings) = config.draw_mode
+        && !symm_edge_settings.is_overlap()
     {
         processed_asym_straight_edges.clear();
         let mut edges: Vec<DrawLineData> = Vec::with_capacity(asym_straight_edge_map.len());
-        for (meta_data, &edge) in asym_straight_edge_map.iter() {
+        for (meta_data, &(mut edge)) in asym_straight_edge_map.into_iter() {
             let opposite_meta_data = meta_data.opposite();
             if !processed_asym_straight_edges.contains(meta_data)
-                && let Some(&other_edge) = asym_straight_edge_map.get(&opposite_meta_data)
+                && let Some(other_edge) = asym_straight_edge_map.get(&opposite_meta_data)
             {
                 // edge and other_edge are not symmetric in the *navigation* system, but would be
                 // draw overlapping, and so "appear" symmetric to the eyes due to mirror symmetry.
@@ -259,56 +258,73 @@ pub fn draw_nav_viz(
                 // "symmetric navigation edge".
                 // In this case, we want to merge the appearance of such "appearing symmetric"
                 // edges in accordance with the Symmetrical Edge Settings
-                if let SymmetricalEdgeSettings::MergeAndMix(factor) = symm_settings {
-                    let mixed_color = edge[0].color.mix(&other_edge[2].color, factor);
+                if let SymmetricalEdgeSettings::MergeAndMix(factor) = symm_edge_settings {
+                    edge[0].line_type = DrawLineType::Arrow;
+                    edge[1].line_type = DrawLineType::Line(None);
+                    edge[2].line_type = DrawLineType::Arrow;
                     // override the color of the whole edge with the mixed color.
-                    edges.push(DrawLineData {
-                        start: edge[0].start,
-                        end: edge[0].end,
-                        // the segment pointing to the start should be an arrow now that this
-                        // edge will appear symmetrical.
-                        line_type: DrawLineType::Arrow,
-                        color: mixed_color,
-                    });
-                    edges.push(DrawLineData {
-                        start: edge[1].start,
-                        end: edge[1].end,
-                        line_type: DrawLineType::Line(None),
-                        color: mixed_color,
-                    });
-                    edges.push(DrawLineData {
-                        start: edge[2].start,
-                        end: edge[2].end,
-                        line_type: DrawLineType::Arrow,
-                        color: mixed_color,
-                    });
+                    let mixed_color = edge[0].color.mix(&other_edge[0].color, factor);
+
+                    for mut line_data in edge {
+                        line_data.color = mixed_color;
+                        edges.push(line_data);
+                    }
+                    processed_asym_straight_edges.insert(opposite_meta_data);
+                } else if let SymmetricalEdgeSettings::MergeAndGradient = symm_edge_settings {
+                    edge[0].line_type = DrawLineType::Arrow;
+                    edge[2].line_type = DrawLineType::Arrow;
+                    // ensure there is a gradient in the middle line to the destination color.
+                    edge[1].color = edge[0].color;
+                    edge[1].line_type = DrawLineType::Line(Some(other_edge[0].color));
+                    // the arrow to the destination should get its color from the destination entity.
+                    edge[2].color = other_edge[0].color;
+
+                    for line_data in edge {
+                        edges.push(line_data);
+                    }
+                    processed_asym_straight_edges.insert(opposite_meta_data);
                 } else {
-                    // MergeAndGradient
-                    edges.push(DrawLineData {
-                        start: edge[0].start,
-                        end: edge[0].end,
-                        // the segment pointing to the start should be an arrow now that this
-                        // edge will appear symmetrical.
-                        line_type: DrawLineType::Arrow,
-                        color: edge[0].color,
-                    });
-                    edges.push(DrawLineData {
-                        start: edge[1].start,
-                        end: edge[1].end,
-                        color: edge[0].color,
-                        // Add a gradient to the other color for middle segment.
-                        line_type: DrawLineType::Line(Some(other_edge[0].color)),
-                    });
-                    edges.push(DrawLineData {
-                        start: edge[2].start,
-                        end: edge[2].end,
-                        // Use the coloring from the other_edge
-                        color: other_edge[0].color,
-                        line_type: DrawLineType::Arrow,
-                    });
+                    // SpacingBetweenTwoArrows
+                    // Must apply nudging to visibly see two arrows.
+                    let from_size = nav_viz_map
+                        .entity_viz_pos_data
+                        .get(&meta_data.source_entity)
+                        .expect("This succeeded when first making these edges")
+                        .size;
+                    let to_size = nav_viz_map
+                        .entity_viz_pos_data
+                        .get(&meta_data.destination_entity)
+                        .expect("This succeeded when first making these edges")
+                        .size;
+                    // The "start" of the edge of the first draw_line_data since it is drawn towards the source entity.
+                    let mut start_edge = edge[0].end;
+                    let mut end_edge = edge[2].end;
+                    maybe_apply_nudge(
+                        (&mut start_edge, from_size, meta_data.source_direction),
+                        (&mut end_edge, to_size, meta_data.destination_direction),
+                        symm_edge_settings,
+                    );
+                    edge[0].end = start_edge;
+                    edge[2].end = end_edge;
+
+                    // Also apply the same exact nudge to the other points
+                    let mut start_line = edge[1].start;
+                    let mut end_line = edge[1].end;
+                    maybe_apply_nudge(
+                        (&mut start_line, from_size, meta_data.source_direction),
+                        (&mut end_line, to_size, meta_data.destination_direction),
+                        symm_edge_settings,
+                    );
+                    edge[0].start = start_line;
+                    edge[1].start = start_line;
+                    edge[1].end = end_line;
+                    edge[2].start = end_line;
+
+                    for line_data in edge {
+                        edges.push(line_data);
+                    }
+                    // The opposite edge will be processed similarly later
                 }
-                // TODO what about nudging them when  `SpacingBetweenSingleArrows`
-                processed_asym_straight_edges.insert(opposite_meta_data);
             } else if !processed_asym_straight_edges.contains(meta_data) {
                 // Draw the asymmetrical edge as normal.
                 for line_data in edge {
@@ -360,65 +376,11 @@ fn get_nav_viz_draw_data(
     if is_symmetrical
         && let AutoNavVizDrawMode::EnabledForAll(symm_edge_settings) = config.draw_mode
     {
-        let start_nudge = match symm_edge_settings {
-            SymmetricalEdgeSettings::SpacingBetweenSingleArrows => from_size / 16.,
-            _ => Vec2::ZERO,
-        };
-        let end_nudge = match symm_edge_settings {
-            SymmetricalEdgeSettings::SpacingBetweenSingleArrows => to_size / 16.,
-            _ => Vec2::ZERO,
-        };
-        // In general, nudge is applied counter-clockwise for the from* entity.
-        // Nudge is applied counter-clockwise for the to* entity if arrow_must_reverse,
-        // clockwise otherwise.
-        match dir {
-            CompassOctant::North => {
-                // Nudge West
-                start -= Vec2::new(start_nudge.x, 0.);
-                end -= Vec2::new(end_nudge.x, 0.);
-            }
-            CompassOctant::NorthEast => {
-                // Nudge West
-                start -= Vec2::new(start_nudge.x, 0.);
-                // Nudge North
-                end += Vec2::new(0., end_nudge.y);
-            }
-            CompassOctant::East => {
-                // Nudge North
-                start += Vec2::new(0., start_nudge.y);
-                // Nudge North
-                end += Vec2::new(0., end_nudge.y);
-            }
-            CompassOctant::SouthEast => {
-                // Nudge North
-                start += Vec2::new(0., start_nudge.y);
-                // Nudge East
-                end += Vec2::new(end_nudge.x, 0.);
-            }
-            CompassOctant::South => {
-                // Nudge East
-                start += Vec2::new(start_nudge.x, 0.);
-                end += Vec2::new(end_nudge.x, 0.);
-            }
-            CompassOctant::SouthWest => {
-                // Nudge East
-                start += Vec2::new(start_nudge.x, 0.);
-                // Nudge South
-                end -= Vec2::new(0., end_nudge.y);
-            }
-            CompassOctant::West => {
-                // Nudge South
-                start -= Vec2::new(0., start_nudge.y);
-                end -= Vec2::new(0., end_nudge.y);
-            }
-            CompassOctant::NorthWest => {
-                // Nudge South
-                start -= Vec2::new(0., start_nudge.y);
-                // Nudge West
-                end -= Vec2::new(end_nudge.x, 0.);
-            }
-        }
-
+        maybe_apply_nudge(
+            (&mut start, from_size, dir),
+            (&mut end, to_size, end_dir),
+            symm_edge_settings,
+        );
         if symm_edge_settings.is_merge() {
             // Update the `end_color` to what the opposite arrow would have been colored.
             end_color = config.get_color_for_direction(to_color, from_color, end_dir);
@@ -474,6 +436,11 @@ fn get_nav_viz_draw_data(
         };
         let destination_arrow_start =
             Into::<Dir2>::into(end_dir).as_vec2() * config.arrow_tip_length + end;
+        let gradient_color = if override_color.is_some() {
+            None
+        } else {
+            Some(end_color)
+        };
         (
             meta_data,
             NavVizDrawData::Straight([
@@ -487,10 +454,7 @@ fn get_nav_viz_draw_data(
                     start: source_arrow_start,
                     end: destination_arrow_start,
                     color: override_color.unwrap_or(start_color),
-                    // If an override was provided, set to None, otherwise to_color
-                    line_type: DrawLineType::Line(
-                        override_color.map_or_else(|| Some(end_color), |_| None),
-                    ),
+                    line_type: DrawLineType::Line(gradient_color),
                 },
                 DrawLineData {
                     start: destination_arrow_start,
@@ -500,6 +464,96 @@ fn get_nav_viz_draw_data(
                 },
             ]),
         )
+    }
+}
+
+/// Apply a nudge to the `start` and `end` of the drawn edge
+/// if `symm_edge_settings` is [`SymmetricalEdgeSettings::SpacingBetweenSingleArrows`].
+///
+/// The nudge applied is proportional to the sizes of the entities.
+/// Nudge is applied counter-clockwise for the source entity and clockwise
+/// for the destination entity.
+fn maybe_apply_nudge(
+    (start, from_size, start_dir): (&mut Vec2, Vec2, CompassOctant),
+    (end, to_size, end_dir): (&mut Vec2, Vec2, CompassOctant),
+    symm_edge_settings: SymmetricalEdgeSettings,
+) {
+    let start_nudge = match symm_edge_settings {
+        SymmetricalEdgeSettings::SpacingBetweenSingleArrows => from_size / 16.,
+        _ => Vec2::ZERO,
+    };
+    let end_nudge = match symm_edge_settings {
+        SymmetricalEdgeSettings::SpacingBetweenSingleArrows => to_size / 16.,
+        _ => Vec2::ZERO,
+    };
+    match start_dir {
+        CompassOctant::North => {
+            // Nudge West
+            *start -= Vec2::new(start_nudge.x, 0.);
+        }
+        CompassOctant::NorthEast => {
+            // Nudge West
+            *start -= Vec2::new(start_nudge.x, 0.);
+        }
+        CompassOctant::East => {
+            // Nudge North
+            *start += Vec2::new(0., start_nudge.y);
+        }
+        CompassOctant::SouthEast => {
+            // Nudge North
+            *start += Vec2::new(0., start_nudge.y);
+        }
+        CompassOctant::South => {
+            // Nudge East
+            *start += Vec2::new(start_nudge.x, 0.);
+        }
+        CompassOctant::SouthWest => {
+            // Nudge East
+            *start += Vec2::new(start_nudge.x, 0.);
+        }
+        CompassOctant::West => {
+            // Nudge South
+            *start -= Vec2::new(0., start_nudge.y);
+        }
+        CompassOctant::NorthWest => {
+            // Nudge South
+            *start -= Vec2::new(0., start_nudge.y);
+        }
+    }
+
+    match end_dir {
+        CompassOctant::North => {
+            // Nudge East
+            *end += Vec2::new(end_nudge.x, 0.);
+        }
+        CompassOctant::NorthEast => {
+            // Nudge South
+            *end -= Vec2::new(0., end_nudge.y);
+        }
+        CompassOctant::East => {
+            // Nudge South
+            *end -= Vec2::new(0., end_nudge.y);
+        }
+        CompassOctant::SouthEast => {
+            // Nudge West
+            *end -= Vec2::new(end_nudge.x, 0.);
+        }
+        CompassOctant::South => {
+            // Nudge West
+            *end -= Vec2::new(end_nudge.x, 0.);
+        }
+        CompassOctant::SouthWest => {
+            // Nudge North
+            *end += Vec2::new(0., end_nudge.y);
+        }
+        CompassOctant::West => {
+            // Nudge North
+            *end += Vec2::new(0., end_nudge.y);
+        }
+        CompassOctant::NorthWest => {
+            // Nudge East
+            *end += Vec2::new(end_nudge.x, 0.);
+        }
     }
 }
 
