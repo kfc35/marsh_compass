@@ -16,6 +16,9 @@ pub(crate) fn rebuild_nav_map(
     config: &AutoNavigationConfig,
 ) {
     nav_map.clear();
+    nav_map
+        .neighbors
+        .shrink_to(focusable_areas.len() + manual_edge_map.neighbors.len());
 
     // Use the `auto_generate_navigation_edges` utility to generate the visualization
     // map. It will find the best candidate in each direction for each entity in `focusable_areas`,

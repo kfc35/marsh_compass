@@ -152,6 +152,7 @@ pub fn draw_nav_viz(
     };
 
     processed_entities.clear();
+    processed_entities.shrink_to(nav_viz_map.entity_viz_pos_data.len());
     asym_straight_edge_map.clear();
     for (entity, neighbors) in entries_to_draw_nav.into_iter() {
         let from_color = *entity_to_color
@@ -246,10 +247,12 @@ pub fn draw_nav_viz(
     // therefore will appear symmetric. This process is only necessary
     // if the symmetric edge setting is not the overlap setting
     asym_straight_line_data.clear();
+    asym_straight_line_data.shrink_to(asym_straight_edge_map.len() * 3);
     if let AutoNavVizDrawMode::EnabledForAll(symm_edge_settings) = config.draw_mode
         && !symm_edge_settings.is_overlap()
     {
         processed_asym_straight_edges.clear();
+        processed_asym_straight_edges.shrink_to(asym_straight_edge_map.len());
         for (meta_data, &(mut edge)) in asym_straight_edge_map.into_iter() {
             let opposite_meta_data = meta_data.opposite();
             if !processed_asym_straight_edges.contains(meta_data)

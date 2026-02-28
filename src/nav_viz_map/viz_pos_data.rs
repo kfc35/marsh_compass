@@ -21,6 +21,8 @@ pub(crate) fn rebuild_entity_viz_pos_data(
     viewport_to_world_2d: &impl Fn(Vec2) -> Result<Vec2, ViewportConversionError>,
 ) {
     viz_pos_data.clear();
+    viz_pos_data.shrink_to(auto_nav_ui_focusable_areas.len());
+
     for focusable_area in auto_nav_ui_focusable_areas {
         let Ok(world_position) = viewport_to_world_2d(focusable_area.position) else {
             continue;
