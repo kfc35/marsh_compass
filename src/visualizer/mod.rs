@@ -110,6 +110,10 @@ pub enum DrawLineType {
     DoubleEndedArrow,
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "This function will not be called directly. Its args are injected."
+)]
 /// The system that draws the visualizations of the auto navigation
 /// system. It uses gizmos to draw arrows between entities.
 pub fn draw_nav_viz(
