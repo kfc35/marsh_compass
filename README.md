@@ -30,8 +30,31 @@ fn setup(mut config_store: ResMut<GizmoConfigStore>) {
 }
 ```
 
+Refer to the documentation for more information on what can be customized -- TODO: must link cargo docs here once created.
+
+## Examples
+Examples are available in [examples](/examples).
+
+### settings
+An example showcasing the different settings of the `AutoNavVizPlugin`
+available for customizing via the `AutoNavVizGizmoConfigGroup`. Use this
+basic example to figure out what settings you prefer for your use case.
+
+## Version Table
+
+| Bevy    | BANV      |
+| ------- | --------- |
+| 0.18    | 0.1 (soon)|
+
 ## Limitations
-Currently, this plugin does not nicely visualize navigation between UI nodes that overlap. Any ideas are welcome -- comment in the GitHub issue about it!
+This crate has some limitations (accurate as of March 2026)
+- It does not nicely visualize navigation between UI nodes that overlap.
+- Arrows do not touch closely to rotated UI nodes.
+- Only entities that are in the same render target as the current focus have
+navigation edges visualized.
+- Probably others not yet reported!
+
+If there is a limitation you would like addressed, file a [GitHub Issue](https://github.com/kfc35/bevy_auto_nav_viz/issues).
 
 ## License
 This project is dual-licensed under
@@ -44,5 +67,3 @@ at your discretion.
 Code contributions are welcome. Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the project by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
 
 No AI contributions allowed.
-
-Feel free to open any issues on GitHub.
