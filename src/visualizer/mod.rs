@@ -125,6 +125,7 @@ pub fn draw_nav_viz(
     mut entity_to_color: Local<EntityHashMap<Color>>,
     mut processed_asym_straight_edges: Local<HashSet<NavVizDrawMetaData>>,
     mut asym_straight_edge_map: Local<HashMap<NavVizDrawMetaData, [DrawLineData; 3]>>,
+    mut asym_straight_line_data: Local<Vec<DrawLineData>>,
 ) {
     let config = config_store.config::<AutoNavVizGizmoConfigGroup>().1;
     let entries_to_draw_nav = match config.draw_mode {
@@ -196,14 +197,14 @@ pub fn draw_nav_viz(
                 .entry(*neighbor)
                 .or_insert(Oklcha::sequential_dispersed(neighbor.index_u32()).into());
 
-            let (nav_viz_meta_data, nav_viz_draw_data) = get_nav_viz_draw_data(
+            let (meta_data, draw_data) = get_nav_viz_draw_data(
                 (*entity, from_pos, from_size, from_color),
                 dir,
                 (*neighbor, to_pos, to_size, to_color),
                 nav_edge_is_symmetrical,
                 config,
             );
-            match nav_viz_draw_data {
+            match draw_data {
                 NavVizDrawData::Looped(loop_around_data) => {
                     gizmos.arc_2d(
                         loop_around_data.start_arc.isometry,
@@ -229,7 +230,7 @@ pub fn draw_nav_viz(
                 NavVizDrawData::Straight(line_data) => {
                     if !nav_edge_is_symmetrical {
                         // Add to the asym_straight_edge_map for further checking before drawing.
-                        asym_straight_edge_map.insert(nav_viz_meta_data, line_data);
+                        asym_straight_edge_map.insert(meta_data, line_data);
                     } else {
                         for line_data in line_data {
                             draw_line(&mut gizmos, config, &line_data);
@@ -242,13 +243,13 @@ pub fn draw_nav_viz(
     }
 
     // Merge any asymmetrical straight edges that would be drawn overlapping and
-    // therefore are "visualized" symmetric. This process is only necessary
+    // therefore will appear symmetric. This process is only necessary
     // if the symmetric edge setting is not the overlap setting
-    let edges = if let AutoNavVizDrawMode::EnabledForAll(symm_edge_settings) = config.draw_mode
+    asym_straight_line_data.clear();
+    if let AutoNavVizDrawMode::EnabledForAll(symm_edge_settings) = config.draw_mode
         && !symm_edge_settings.is_overlap()
     {
         processed_asym_straight_edges.clear();
-        let mut edges: Vec<DrawLineData> = Vec::with_capacity(asym_straight_edge_map.len());
         for (meta_data, &(mut edge)) in asym_straight_edge_map.into_iter() {
             let opposite_meta_data = meta_data.opposite();
             if !processed_asym_straight_edges.contains(meta_data)
@@ -271,7 +272,7 @@ pub fn draw_nav_viz(
 
                     for mut line_data in edge {
                         line_data.color = mixed_color;
-                        edges.push(line_data);
+                        asym_straight_line_data.push(line_data);
                     }
                     processed_asym_straight_edges.insert(opposite_meta_data);
                 } else if let SymmetricalEdgeSettings::MergeAndGradient = symm_edge_settings {
@@ -284,7 +285,7 @@ pub fn draw_nav_viz(
                     edge[2].color = other_edge[0].color;
 
                     for line_data in edge {
-                        edges.push(line_data);
+                        asym_straight_line_data.push(line_data);
                     }
                     processed_asym_straight_edges.insert(opposite_meta_data);
                 } else {
@@ -325,27 +326,25 @@ pub fn draw_nav_viz(
                     edge[2].start = end_line;
 
                     for line_data in edge {
-                        edges.push(line_data);
+                        asym_straight_line_data.push(line_data);
                     }
                     // The opposite edge will be processed similarly later
                 }
             } else if !processed_asym_straight_edges.contains(meta_data) {
                 // Draw the asymmetrical edge as normal.
                 for line_data in edge {
-                    edges.push(line_data);
+                    asym_straight_line_data.push(line_data);
                 }
             }
             processed_asym_straight_edges.insert(*meta_data);
         }
-        edges
     } else {
-        asym_straight_edge_map
-            .iter()
-            .flat_map(|(_, &edge)| edge)
-            .collect::<Vec<DrawLineData>>()
-    };
+        for line_data in asym_straight_edge_map.iter().flat_map(|(_, &edge)| edge) {
+            asym_straight_line_data.push(line_data);
+        }
+    }
 
-    for line_data in edges.iter() {
+    for line_data in asym_straight_line_data.iter() {
         draw_line(&mut gizmos, config, line_data);
     }
 }
