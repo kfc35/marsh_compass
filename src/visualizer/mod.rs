@@ -17,8 +17,8 @@ pub fn draw_nav_viz(
     mut gizmos: Gizmos<AutoNavVizGizmoConfigGroup>,
     mut processed_entities: Local<EntityHashSet>,
     mut entity_to_color: Local<EntityHashMap<Color>>,
-    mut processed_assym_straight_edges: Local<HashSet<NavVizDrawMetaData>>,
-    mut assym_straight_edge_map: Local<HashMap<NavVizDrawMetaData, [DrawLineData; 3]>>,
+    mut processed_asym_straight_edges: Local<HashSet<NavVizDrawMetaData>>,
+    mut asym_straight_edge_map: Local<HashMap<NavVizDrawMetaData, [DrawLineData; 3]>>,
 ) {
     let config = config_store.config::<AutoNavVizGizmoConfigGroup>().1;
     let entries_to_draw_nav = match config.drawing_mode {
@@ -45,7 +45,7 @@ pub fn draw_nav_viz(
     };
 
     processed_entities.clear();
-    assym_straight_edge_map.clear();
+    asym_straight_edge_map.clear();
     for (entity, neighbors) in entries_to_draw_nav.into_iter() {
         let from_color = *entity_to_color
             .entry(*entity)
@@ -122,8 +122,8 @@ pub fn draw_nav_viz(
                 }
                 NavVizDrawData::Straight(line_data) => {
                     if !nav_edge_is_symmetrical {
-                        // Add to the assym_straight_edge_map for further merging.
-                        assym_straight_edge_map.insert(nav_viz_meta_data, line_data);
+                        // Add to the asym_straight_edge_map for further merging.
+                        asym_straight_edge_map.insert(nav_viz_meta_data, line_data);
                     } else {
                         for line_data in line_data {
                             draw_line(&mut gizmos, config, &line_data);
@@ -135,18 +135,18 @@ pub fn draw_nav_viz(
         processed_entities.insert(*entity);
     }
 
-    // Merge any assym straight edges that would be drawn overlapping and
+    // Merge any asymmetrical straight edges that would be drawn overlapping and
     // therefore are "visualized" symmetric. This process is only necessary
     // if the symmetric edge setting is a "merge" setting
     let edges = if let AutoNavVizDrawMode::EnabledForAll(symm_settings) = config.drawing_mode
         && symm_settings.is_merge()
     {
-        processed_assym_straight_edges.clear();
-        let mut edges: Vec<DrawLineData> = Vec::with_capacity(assym_straight_edge_map.len());
-        for (meta_data, &edge) in assym_straight_edge_map.iter() {
+        processed_asym_straight_edges.clear();
+        let mut edges: Vec<DrawLineData> = Vec::with_capacity(asym_straight_edge_map.len());
+        for (meta_data, &edge) in asym_straight_edge_map.iter() {
             let opposite_meta_data = meta_data.opposite();
-            if !processed_assym_straight_edges.contains(meta_data)
-                && let Some(&other_edge) = assym_straight_edge_map.get(&opposite_meta_data)
+            if !processed_asym_straight_edges.contains(meta_data)
+                && let Some(&other_edge) = asym_straight_edge_map.get(&opposite_meta_data)
             {
                 // edge and other are not symmetric in the *navigation* system, but would be drawn
                 // overlapping, and so "appear" symmetric to our eyes due to mirror symmetry.
@@ -203,13 +203,18 @@ pub fn draw_nav_viz(
                         line_type: DrawLineType::Arrow,
                     });
                 }
-                processed_assym_straight_edges.insert(opposite_meta_data);
+                processed_asym_straight_edges.insert(opposite_meta_data);
+            } else {
+                // Draw the asymmetrical edge as normal.
+                for line_data in edge {
+                    edges.push(line_data);
+                }
             }
-            processed_assym_straight_edges.insert(*meta_data);
+            processed_asym_straight_edges.insert(*meta_data);
         }
         edges
     } else {
-        assym_straight_edge_map
+        asym_straight_edge_map
             .iter()
             .flat_map(|(_, &edge)| edge)
             .collect::<Vec<DrawLineData>>()
@@ -485,12 +490,12 @@ pub enum NavVizDrawData {
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NavVizDrawMetaData {
     pub source_entity: Entity,
-    // The direction from which the visualization starts at the source entity
+    /// The direction from which the visualization starts at the source entity
     pub source_direction: CompassOctant,
     pub destination_entity: Entity,
-    // The direction to which the visualization ends on the destination entity.
-    // i.e. SouthEast means that the arrow points towards the SE corner of the
-    // destination entity.
+    /// The direction to which the visualization ends on the destination entity.
+    /// i.e. SouthEast means that the arrow points towards the SE corner of the
+    /// destination entity.
     pub destination_direction: CompassOctant,
 }
 
