@@ -6,7 +6,7 @@ use bevy::input_focus::{
 };
 use bevy::prelude::*;
 use bevy::ui::auto_directional_navigation::AutoDirectionalNavigation;
-use marsh_compass::AutoNavVizPlugin;
+use bevy_auto_nav_viz::AutoNavVizPlugin;
 
 fn main() {
     App::new()

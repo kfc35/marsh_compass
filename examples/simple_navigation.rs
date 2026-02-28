@@ -11,7 +11,7 @@ use bevy::math::CompassOctant;
 use bevy::platform::collections::HashSet;
 use bevy::prelude::*;
 use bevy::ui::auto_directional_navigation::{AutoDirectionalNavigation, AutoDirectionalNavigator};
-use marsh_compass::{AutoNavVizColorMode, AutoNavVizGizmoConfigGroup, AutoNavVizPlugin};
+use bevy_auto_nav_viz::{AutoNavVizColorMode, AutoNavVizGizmoConfigGroup, AutoNavVizPlugin};
 
 fn main() {
     App::new()

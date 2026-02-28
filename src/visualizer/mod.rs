@@ -204,7 +204,7 @@ pub fn draw_nav_viz(
                     });
                 }
                 processed_asym_straight_edges.insert(opposite_meta_data);
-            } else {
+            } else if !processed_asym_straight_edges.contains(meta_data) {
                 // Draw the asymmetrical edge as normal.
                 for line_data in edge {
                     edges.push(line_data);
