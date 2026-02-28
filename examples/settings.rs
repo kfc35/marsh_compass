@@ -1,7 +1,16 @@
-//! An example showing a navigation visualization rendered for a simple 3x3 grid of buttons.
-//! The arrow keys / D-pad can be used to change focus between buttons, which will
-//! update the visualization depending on the draw mode.
-//! Plugin settings and the example itself can be changed with certain key-presses.
+//! An example showcasing the different settings of the [`AutoNavVizPlugin`],
+//! available for tuning via the [`AutoNavVizGizmoConfigGroup`].
+//! 
+//! A navigation visualization is rendered for a simple 3x3 grid of buttons.
+//! The arrow keys / D-pad can be used to change focus between buttons. If the draw
+//! mode is set to "Enabled for Current Focus", this will update the navigation
+//! visualization.
+//! The plugin settings and the example itself can be changed with certain key-presses.
+//! Run the example and feel free to play around with the different settings
+//! to see which one best fits your style/application.
+//! If you have an idea for any additional settings, feel free to make a Github
+//! issue requesting your feature.
+use bevy::ecs::system::SystemParam;
 use bevy::input::keyboard::Key;
 use bevy::input_focus::{
     InputDispatchPlugin, InputFocus, InputFocusVisible,
@@ -54,6 +63,71 @@ impl Default for OrderedButtons {
     }
 }
 
+/// Marker component describing the current draw mode
+#[derive(Component)]
+struct DrawModeText;
+
+/// Marker component describing the state of directional colors
+#[derive(Component)]
+struct DirectionalColorsText;
+
+/// Marker component describing the current color mode
+#[derive(Component)]
+struct ColorModeText;
+
+/// Marker component describing the state of looping edges
+#[derive(Component)]
+struct LoopingEdgesText;
+
+/// System param for easily getting text.
+#[derive(SystemParam)]
+struct GetTextParam<'w, 's> {
+    draw_mode_query: Query<
+        'w,
+        's,
+        &'static mut Text,
+        (
+            With<DrawModeText>,
+            Without<DirectionalColorsText>,
+            Without<ColorModeText>,
+            Without<LoopingEdgesText>,
+        ),
+    >,
+    dir_color_query: Query<
+        'w,
+        's,
+        &'static mut Text,
+        (
+            With<DirectionalColorsText>,
+            Without<DrawModeText>,
+            Without<ColorModeText>,
+            Without<LoopingEdgesText>,
+        ),
+    >,
+    color_mode_query: Query<
+        'w,
+        's,
+        &'static mut Text,
+        (
+            With<ColorModeText>,
+            Without<DrawModeText>,
+            Without<DirectionalColorsText>,
+            Without<LoopingEdgesText>,
+        ),
+    >,
+    looping_edges_query: Query<
+        'w,
+        's,
+        &'static mut Text,
+        (
+            With<LoopingEdgesText>,
+            Without<DrawModeText>,
+            Without<DirectionalColorsText>,
+            Without<ColorModeText>,
+        ),
+    >,
+}
+
 fn setup(
     mut commands: Commands,
     mut buttons: ResMut<OrderedButtons>,
@@ -74,7 +148,7 @@ fn setup(
     let rules_container = commands
         .spawn((
             Node {
-                width: px(400),
+                width: px(300),
                 justify_content: JustifyContent::Center,
                 ..default()
             },
@@ -94,6 +168,11 @@ fn setup(
         .spawn((Node {
             width: px(500),
             height: px(500),
+            margin: UiRect {
+                left: px(50),
+                right: px(50),
+                ..default()
+            },
             ..default()
         },))
         .id();
@@ -115,6 +194,51 @@ fn setup(
             }
         }
     }
+
+    let settings_container = commands
+        .spawn((
+            Node {
+                width: px(300),
+                display: Display::Block,
+                ..default()
+            },
+            children![
+                (
+                    Node {
+                        width: percent(100),
+                        ..default()
+                    },
+                    DrawModeText,
+                    Text::new("Draw Mode: Enabled for Current Focus\n\n")
+                ),
+                (
+                    Node {
+                        width: percent(100),
+                        ..default()
+                    },
+                    DirectionalColorsText,
+                    Text::new("Directional Colors: Default\n\n")
+                ),
+                (
+                    Node {
+                        width: percent(100),
+                        ..default()
+                    },
+                    ColorModeText,
+                    Text::new("Color Mode: Directional Only\n\n")
+                ),
+                (
+                    Node {
+                        width: percent(100),
+                        ..default()
+                    },
+                    LoopingEdgesText,
+                    Text::new("Looping Edges: Inactive\n\n")
+                ),
+            ],
+        ))
+        .id();
+    commands.entity(root_id).add_child(settings_container);
 }
 
 fn spawn_button(commands: &mut Commands, left: i32, top: i32, i: usize, j: usize) -> Entity {
@@ -171,57 +295,83 @@ fn update_example(
     buttons: Res<OrderedButtons>,
     mut override_map: ResMut<DirectionalNavigationMap>,
     real_time: Res<Time<Real>>,
+    mut get_text_param: GetTextParam,
 ) {
     // update config
     let (_, group_config) = config_store.config_mut::<AutoNavVizGizmoConfigGroup>();
     if keyboard.just_pressed(Key::Character("1".into())) {
+        let mut draw_mode_text = get_text_param.draw_mode_query.single_mut().unwrap();
         group_config.draw_mode = match group_config.draw_mode {
             AutoNavVizDrawMode::EnabledForCurrentFocus => {
+                draw_mode_text.0 = "Draw Mode: Enabled For All - Merge and Gradient\n\n".into();
                 AutoNavVizDrawMode::EnabledForAll(SymmetricalEdgeSettings::MergeAndGradient)
             }
             AutoNavVizDrawMode::EnabledForAll(symm_settings) => match symm_settings {
-                SymmetricalEdgeSettings::MergeAndGradient => AutoNavVizDrawMode::EnabledForAll(
-                    SymmetricalEdgeSettings::merge_and_mix_evenly(),
-                ),
-                SymmetricalEdgeSettings::MergeAndMix(_) => AutoNavVizDrawMode::EnabledForAll(
-                    SymmetricalEdgeSettings::SpacingBetweenSingleArrows,
-                ),
+                SymmetricalEdgeSettings::MergeAndGradient => {
+                    draw_mode_text.0 =
+                        "Draw Mode: Enabled For All - Merge and Mix Evenly\n\n".into();
+                    AutoNavVizDrawMode::EnabledForAll(
+                        SymmetricalEdgeSettings::merge_and_mix_evenly(),
+                    )
+                }
+                SymmetricalEdgeSettings::MergeAndMix(_) => {
+                    draw_mode_text.0 =
+                        "Draw Mode: Enabled For All - Spacing Between Single Arrows\n\n".into();
+                    AutoNavVizDrawMode::EnabledForAll(
+                        SymmetricalEdgeSettings::SpacingBetweenSingleArrows,
+                    )
+                }
                 SymmetricalEdgeSettings::SpacingBetweenSingleArrows => {
+                    draw_mode_text.0 =
+                        "Draw Mode: Enabled For All - Overlapping Single Arrows\n\n".into();
                     AutoNavVizDrawMode::EnabledForAll(
                         SymmetricalEdgeSettings::OverlappingSingleArrows,
                     )
                 }
                 SymmetricalEdgeSettings::OverlappingSingleArrows => {
+                    draw_mode_text.0 = "Draw Mode: Enabled For Current Focus\n\n".into();
                     AutoNavVizDrawMode::EnabledForCurrentFocus
                 }
             },
         };
     }
     if keyboard.just_pressed(Key::Character("2".into())) {
+        let mut directional_colors_text = get_text_param.dir_color_query.single_mut().unwrap();
         if colors_toggle.0 {
             group_config.set_directional_colors_to_defaults();
             colors_toggle.0 = false;
+            directional_colors_text.0 = "Directional Colors: Default\n\n".into();
         } else {
             group_config.set_directional_colors_to_none();
             colors_toggle.0 = true;
+            directional_colors_text.0 = "Directional Colors: None\n\n".into();
         }
     }
     if keyboard.just_pressed(Key::Character("3".into())) {
+        let mut color_mode_text = get_text_param.color_mode_query.single_mut().unwrap();
         group_config.color_mode = match group_config.color_mode {
             AutoNavVizColorMode::DirectionalOnly => {
+                color_mode_text.0 =
+                    "Color Mode: Mix Directional Coolor with Source Entity Evenly\n\n".into();
                 AutoNavVizColorMode::mix_with_source_entity_evenly()
             }
             AutoNavVizColorMode::MixedWithSourceEntity(factor) => {
                 if factor <= 0.5 {
+                    color_mode_text.0 = "Color Mode: Only Source Entity\n\n".into();
                     AutoNavVizColorMode::source_entity_color_only()
                 } else {
+                    color_mode_text.0 =
+                        "Color Mode: Mix Directional Color with Destination Entity Evenly\n\n"
+                            .into();
                     AutoNavVizColorMode::mix_with_destination_entity_evenly()
                 }
             }
             AutoNavVizColorMode::MixedWithDestinationEntity(factor) => {
                 if factor <= 0.5 {
+                    color_mode_text.0 = "Color Mode: Only Destination Entity\n\n".into();
                     AutoNavVizColorMode::destination_entity_color_only()
                 } else {
+                    color_mode_text.0 = "Color Mode: Directional only\n\n".into();
                     AutoNavVizColorMode::DirectionalOnly
                 }
             }
@@ -238,6 +388,7 @@ fn update_example(
 
     // update example
     if keyboard.just_pressed(Key::Character("l".into())) {
+        let mut looping_edges_text = get_text_param.looping_edges_query.single_mut().unwrap();
         if override_map.neighbors.is_empty() {
             for row in 0..3 {
                 override_map.add_looping_edges(&buttons[row * 3..row * 3 + 3], CompassOctant::East);
@@ -254,8 +405,10 @@ fn update_example(
                 &[buttons[2], buttons[4], buttons[6]],
                 CompassOctant::SouthWest,
             );
+            looping_edges_text.0 = "Looping Edges: Active\n\n".into();
         } else {
             override_map.clear();
+            looping_edges_text.0 = "Looping Edges: Inactive\n\n".into();
         }
     }
 }
