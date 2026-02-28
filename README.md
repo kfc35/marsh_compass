@@ -1,4 +1,5 @@
-# Bevy Auto Nav Viz
+# ![Bevy Auto Nav Viz](assets/preview.png)
+
 A Bevy Plugin that draws a visualization of the auto directional navigation in Bevy's UI Framework.
 
 ## Usage
