@@ -1,4 +1,4 @@
-//! # Marsh Compass
+//! # Bevy Auto Nav Viz
 //! A Bevy Plugin that draws a visualization of the auto directional navigation
 //! system in Bevy's UI Framework.
 //!
@@ -12,7 +12,7 @@
 //! #   InputDispatchPlugin,
 //! #   directional_navigation::DirectionalNavigationPlugin
 //! # };
-//! # use marsh_compass::AutoNavVizPlugin;
+//! # use bevy_auto_nav_viz::AutoNavVizPlugin;
 //! fn main() {
 //!     App::new()
 //!         .add_plugins((
@@ -30,7 +30,7 @@
 //! ```
 //! # use bevy::gizmos::config::GizmoConfigGroup;
 //! # use bevy::prelude::*;
-//! # use marsh_compass::{AutoNavVizGizmoConfigGroup, AutoNavVizDrawMode};
+//! # use bevy_auto_nav_viz::{AutoNavVizGizmoConfigGroup, AutoNavVizDrawMode};
 //! fn setup(mut config_store: ResMut<GizmoConfigStore>) {
 //!     let mut config = config_store.config_mut::<AutoNavVizGizmoConfigGroup>().1;
 //!     // e.g.

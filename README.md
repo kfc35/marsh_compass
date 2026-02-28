@@ -1,4 +1,4 @@
-# Marsh Compass
+# Bevy Auto Nav Viz
 A Bevy Plugin that draws a visualization of the auto directional navigation in Bevy's UI Framework.
 
 ## Usage
