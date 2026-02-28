@@ -1,6 +1,6 @@
 //! An example showcasing the different settings of the [`AutoNavVizPlugin`],
 //! available for tuning via the [`AutoNavVizGizmoConfigGroup`].
-//! 
+//!
 //! A navigation visualization is rendered for a simple 3x3 grid of buttons.
 //! The arrow keys / D-pad can be used to change focus between buttons. If the draw
 //! mode is set to "Enabled for Current Focus", this will update the navigation

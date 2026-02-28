@@ -57,7 +57,7 @@ impl NavVizDrawMetaData {
 }
 
 /// A struct containing multiple draw elements that, when composed,
-/// visualize a "looped" navigation edge. Compared to a "straight"
+/// visualizes a "looped" navigation edge. Compared to a "straight"
 /// navigation edge, a "looped" edge hooks around its start and
 /// destination entities to point to/from their farthest points.
 #[derive(Clone, Copy, PartialEq)]
@@ -342,7 +342,10 @@ pub fn draw_nav_viz(
             processed_asym_straight_edges.insert(*meta_data);
         }
     } else {
-        for line_data in asym_straight_edge_map.iter().flat_map(|(_, &edge)| edge) {
+        for line_data in asym_straight_edge_map
+            .into_iter()
+            .flat_map(|(_, &edge)| edge)
+        {
             asym_straight_line_data.push(line_data);
         }
     }
@@ -420,13 +423,14 @@ fn get_nav_viz_draw_data(
             ),
         )
     } else if (end - start).length() <= 2. * config.arrow_tip_length {
-        // too short to accommodate a line gradient
+        // too short to potentially accommodate a line gradient
+        // TODO: Gizmo arrows should support line gradients on their own.
         (
             meta_data,
             NavVizDrawData::ShortStraight([DrawLineData {
                 start,
                 end,
-                color: start_color,
+                color: override_color.unwrap_or(start_color),
                 line_type,
             }]),
         )

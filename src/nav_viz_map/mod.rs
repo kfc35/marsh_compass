@@ -12,7 +12,7 @@ mod navigable_nodes;
 
 /// Resource used to represent the complete navigation map: auto navigation edges combined
 /// with overridden manual edges. It also includes world-coordinate position and size
-/// data of each entity in a separate entity hash map .
+/// data of each entity in a separate entity hash map.
 #[derive(Resource, Default)]
 pub struct NavVizMap {
     /// This map contains the navigation edges that would be taken by the
