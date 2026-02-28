@@ -93,7 +93,7 @@ pub(crate) fn calculate_arc(
     config: &AutoNavVizGizmoConfigGroup,
 ) -> (DrawLineData, DrawArcData, Vec2) {
     // line_start is also the starting point of the arc.
-    // This logic also pushes the arc to be drawn further out from the node.
+    // This logic also pushes the arc to be drawn further out from the entities.
     // It looks a little awkward when drawn too close.
     // The direction is multiplied by arrow_tip_length because the arrow tip
     // looks most natural when tip length is proportional to the arrow's length itself.
@@ -107,7 +107,7 @@ pub(crate) fn calculate_arc(
 
     // Ensuring the radius is some fraction of size ensures that
     // multiple consecutive looping edges are spaced out visually when
-    // approaching near nodes. Along a side, we must accommodate at most
+    // approaching near entities. Along a side, we must accommodate at most
     // 3 drawn arcs. Since the arcs can be mirrored, we should accommodate
     // 6 arcs per side to account for these permutations.
     // The radius length is 1/2 the arc diameter. So, the radius must be

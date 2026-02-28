@@ -8,6 +8,108 @@ use crate::{AutoNavVizDrawMode, AutoNavVizGizmoConfigGroup, NavVizMap, Symmetric
 
 mod looped;
 
+/// A struct representing a navigation edge's visualization.
+#[derive(Clone, Copy, PartialEq)]
+pub enum NavVizDrawData {
+    /// A navigation edge that connects the two closest points of
+    /// two navigation entities. It is broken up into 3 [`DrawLineData`]
+    /// segments to allow for a possible color gradient along the arrow.
+    /// The first entry is an arrow or line towards the source entity.
+    /// The second entry is a line between the source entity's line/arrow and the destination entity's arrow
+    /// The third entry is an arrow towards the destination entity.
+    Straight([DrawLineData; 3]),
+
+    /// A navigation edge that connects the two closest points of
+    /// two navigation entities. It is too short to be broken up
+    /// into 3 [`DrawLineData`], so it is just one [`DrawLineData`]
+    /// representing an arrow or a double ended arrow
+    ShortStraight([DrawLineData; 1]),
+
+    /// A navigation edge that must loop around its entities to point to
+    /// their farthest points. See [`DrawLoopedLineData`] for details.
+    Looped(DrawLoopedLineData),
+}
+
+/// Metadata describing what a [`NavVizDrawData`] connects at a high level.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct NavVizDrawMetaData {
+    pub source_entity: Entity,
+    /// The direction from which the visualization starts at the source entity
+    pub source_direction: CompassOctant,
+    pub destination_entity: Entity,
+    /// The direction to which the visualization ends on the destination entity.
+    /// i.e. SouthEast means that the arrow points towards the SE corner of the
+    /// destination entity.
+    pub destination_direction: CompassOctant,
+}
+
+impl NavVizDrawMetaData {
+    /// Returns the meta data for the hypothetical opposite edge compared
+    /// to this one (i.e. the source and destination fields switch values).
+    pub fn opposite(&self) -> Self {
+        NavVizDrawMetaData {
+            source_entity: self.destination_entity,
+            source_direction: self.destination_direction,
+            destination_entity: self.source_entity,
+            destination_direction: self.source_direction,
+        }
+    }
+}
+
+/// A struct containing multiple draw elements that, when composed,
+/// visualize a "looped" navigation edge. Compared to a "straight"
+/// navigation edge, a "looped" edge hooks around its start and
+/// destination entities to point to/from their farthest points.
+#[derive(Clone, Copy, PartialEq)]
+pub struct DrawLoopedLineData {
+    /// The arc (semi-circle) drawn near the source entity.
+    start_arc: DrawArcData,
+
+    /// The arc (semi-circle) drawn near the destination entity.
+    end_arc: DrawArcData,
+
+    /// line_data contains:
+    /// - the line from the source entity to the start_arc
+    /// - the line between start_arc and end_arc
+    /// - the line from the end_arc to the destination entity
+    line_data: [DrawLineData; 3],
+}
+
+/// A struct containing necessary information to draw an arc
+/// via [`Gizmos`].
+#[derive(Clone, Copy, PartialEq)]
+pub struct DrawArcData {
+    isometry: Isometry2d,
+    arc_angle: f32,
+    radius: f32,
+    color: Color,
+}
+
+/// A struct containing necessary information to draw a line/arrow
+/// via [`Gizmos`].
+#[derive(Clone, Copy, PartialEq)]
+pub struct DrawLineData {
+    line_type: DrawLineType,
+    start: Vec2,
+    end: Vec2,
+    /// Color of the line. If [`DrawLineType`] is [`DrawLineType::Line`] with
+    /// an additional line color, this `color` field will be used as the
+    /// start_color for `line_gradient_2d`
+    color: Color,
+}
+
+/// An enum used by [`DrawLineData`] to denote whether the line should
+/// be drawn as a Line, Arrow, or a Double Ended Arrow
+#[derive(Clone, Copy, PartialEq)]
+pub enum DrawLineType {
+    /// Used to represent a line. If a color is provided, this line
+    /// will be drawn with a gradient via `line_gradient_2d`, using
+    /// the given Some(color) as the end_color.
+    Line(Option<Color>),
+    Arrow,
+    DoubleEndedArrow,
+}
+
 /// The system that draws the visualizations of the auto navigation
 /// system. It uses gizmos to draw arrows between entities.
 pub fn draw_nav_viz(
@@ -21,7 +123,7 @@ pub fn draw_nav_viz(
     mut asym_straight_edge_map: Local<HashMap<NavVizDrawMetaData, [DrawLineData; 3]>>,
 ) {
     let config = config_store.config::<AutoNavVizGizmoConfigGroup>().1;
-    let entries_to_draw_nav = match config.drawing_mode {
+    let entries_to_draw_nav = match config.draw_mode {
         AutoNavVizDrawMode::EnabledForCurrentFocus => {
             if let Some(entity) = &input_focus.0
                 && let Some(neighbors) = nav_viz_map.map.get_neighbors(*entity)
@@ -80,7 +182,7 @@ pub fn draw_nav_viz(
             // If the draw mode merges symmetrical edges and this is a symmetrical edge,
             // We should only draw the edge once.
             if nav_edge_is_symmetrical
-                && let AutoNavVizDrawMode::EnabledForAll(symm_edge_settings) = config.drawing_mode
+                && let AutoNavVizDrawMode::EnabledForAll(symm_edge_settings) = config.draw_mode
                 && symm_edge_settings.is_merge()
                 && processed_entities.contains(neighbor)
             {
@@ -122,7 +224,7 @@ pub fn draw_nav_viz(
                 }
                 NavVizDrawData::Straight(line_data) => {
                     if !nav_edge_is_symmetrical {
-                        // Add to the asym_straight_edge_map for further merging.
+                        // Add to the asym_straight_edge_map for further checking before drawing.
                         asym_straight_edge_map.insert(nav_viz_meta_data, line_data);
                     } else {
                         for line_data in line_data {
@@ -138,7 +240,8 @@ pub fn draw_nav_viz(
     // Merge any asymmetrical straight edges that would be drawn overlapping and
     // therefore are "visualized" symmetric. This process is only necessary
     // if the symmetric edge setting is a "merge" setting
-    let edges = if let AutoNavVizDrawMode::EnabledForAll(symm_settings) = config.drawing_mode
+    // TODO what about applying nudge if they should be spaced
+    let edges = if let AutoNavVizDrawMode::EnabledForAll(symm_settings) = config.draw_mode
         && symm_settings.is_merge()
     {
         processed_asym_straight_edges.clear();
@@ -148,13 +251,14 @@ pub fn draw_nav_viz(
             if !processed_asym_straight_edges.contains(meta_data)
                 && let Some(&other_edge) = asym_straight_edge_map.get(&opposite_meta_data)
             {
-                // edge and other are not symmetric in the *navigation* system, but would be drawn
-                // overlapping, and so "appear" symmetric to our eyes due to mirror symmetry.
+                // edge and other_edge are not symmetric in the *navigation* system, but would be
+                // draw overlapping, and so "appear" symmetric to the eyes due to mirror symmetry.
                 // For example, if between entities A <-> B, there is a NE Nav Edge from A -> B
                 // and a NW Nav Edge from B -> A, there will be an edge *drawn* symmetrically
                 // between A's NE point and B's NW point, but this is *not* considered a
-                // symmetric navigation edge.
-                // In this case, we want to merge the appearance of the edges according to the symm_settings
+                // "symmetric navigation edge".
+                // In this case, we want to merge the appearance of such "appearing symmetric"
+                // edges in accordance with the Symmetrical Edge Settings
                 if let SymmetricalEdgeSettings::MergeAndMix(factor) = symm_settings {
                     let mixed_color = edge[0].color.mix(&other_edge[2].color, factor);
                     // override the color of the whole edge with the mixed color.
@@ -203,6 +307,7 @@ pub fn draw_nav_viz(
                         line_type: DrawLineType::Arrow,
                     });
                 }
+                // TODO what about nudging them when  `SpacingBetweenSingleArrows`
                 processed_asym_straight_edges.insert(opposite_meta_data);
             } else if !processed_asym_straight_edges.contains(meta_data) {
                 // Draw the asymmetrical edge as normal.
@@ -225,6 +330,10 @@ pub fn draw_nav_viz(
     }
 }
 
+/// Creates a tuple of [`NavVizDrawMetaData`] and [`NavVizDrawData`] for the given edge parameters.
+///
+/// This function decides the most appropriate way to visualize the navigation edge and
+/// returns all of the data needed to draw the edge via [`Gizmos`].
 fn get_nav_viz_draw_data(
     (from_entity, from_pos, from_size, from_color): (Entity, Vec2, Vec2, Color),
     dir: CompassOctant,
@@ -249,7 +358,7 @@ fn get_nav_viz_draw_data(
     let mut override_color = None;
 
     if is_symmetrical
-        && let AutoNavVizDrawMode::EnabledForAll(symm_edge_settings) = config.drawing_mode
+        && let AutoNavVizDrawMode::EnabledForAll(symm_edge_settings) = config.draw_mode
     {
         let start_nudge = match symm_edge_settings {
             SymmetricalEdgeSettings::SpacingBetweenSingleArrows => from_size / 16.,
@@ -464,108 +573,6 @@ fn draw_line(
     }
 }
 
-/// A unit of draw data representing a navigation edge.
-#[derive(Clone, Copy, PartialEq)]
-pub enum NavVizDrawData {
-    /// A navigation edge that connects the two closest points of
-    /// two navigation nodes. It is broken up into 3 [`DrawLineData`]
-    /// segments to allow for a possible color gradient along the arrow.
-    /// The first entry is an arrow or line towards the source entity.
-    /// The second entry is a line between the source entity's line/arrow and the destination entity's arrow
-    /// The third entry is an arrow towards the destination entity.
-    Straight([DrawLineData; 3]),
-
-    /// A navigation edge that connects the two closest points of
-    /// two navigation nodes. It is too short to be broken up
-    /// into 3 [`DrawLineData`], so it is just one [`DrawLineData`]
-    /// representing an arrow or a double ended arrow
-    ShortStraight([DrawLineData; 1]),
-
-    /// A navigation edge that must loop around its nodes to point to
-    /// the farthest points of two navigation nodes.
-    Looped(DrawLoopedLineData),
-}
-
-/// Meta data describing what a [`NavVizDrawData`] connects at a high level.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct NavVizDrawMetaData {
-    pub source_entity: Entity,
-    /// The direction from which the visualization starts at the source entity
-    pub source_direction: CompassOctant,
-    pub destination_entity: Entity,
-    /// The direction to which the visualization ends on the destination entity.
-    /// i.e. SouthEast means that the arrow points towards the SE corner of the
-    /// destination entity.
-    pub destination_direction: CompassOctant,
-}
-
-impl NavVizDrawMetaData {
-    /// Returns the meta data for the hypothetical opposite edge compared
-    /// to this one (i.e. the source and destination fields switch values).
-    pub fn opposite(&self) -> Self {
-        NavVizDrawMetaData {
-            source_entity: self.destination_entity,
-            source_direction: self.destination_direction,
-            destination_entity: self.source_entity,
-            destination_direction: self.source_direction,
-        }
-    }
-}
-
-/// A struct containing multiple draw elements that, when composed,
-/// visualize a "looped" navigation edge. Compared to a "straight"
-/// navigation edge, a "looped" edge hooks around its start and
-/// destination nodes to point to/from their farthest points.
-#[derive(Clone, Copy, PartialEq)]
-pub struct DrawLoopedLineData {
-    /// The arc (semi-circle) drawn near the source node.
-    start_arc: DrawArcData,
-
-    /// The arc (semi-circle) drawn near the destination node.
-    end_arc: DrawArcData,
-
-    /// line_data contains:
-    /// - the line from the source node to the start_arc
-    /// - the line between start_arc and end_arc
-    /// - the line from the end_arc to the destination node
-    line_data: [DrawLineData; 3],
-}
-
-/// A struct containing necessary information to draw an arc
-/// via [`Gizmos`].
-#[derive(Clone, Copy, PartialEq)]
-pub struct DrawArcData {
-    isometry: Isometry2d,
-    arc_angle: f32,
-    radius: f32,
-    color: Color,
-}
-
-/// A struct containing necessary information to draw a line/arrow
-/// via [`Gizmos`].
-#[derive(Clone, Copy, PartialEq)]
-pub struct DrawLineData {
-    line_type: DrawLineType,
-    start: Vec2,
-    end: Vec2,
-    /// Color of the line. If [`DrawLineType`] is [`DrawLineType::Line`] with
-    /// an additional line color, this `color` field will be used as the
-    /// start_color for `line_gradient_2d`
-    color: Color,
-}
-
-/// An enum used by [`DrawLineData`] to denote whether the line should
-/// be drawn as a Line, Arrow, or a Double Ended Arrow
-#[derive(Clone, Copy, PartialEq)]
-pub enum DrawLineType {
-    /// Used to represent a line. If a color is provided, this line
-    /// will be drawn with a gradient via `line_gradient_2d`, using
-    /// the given Some(color) as the end_color.
-    Line(Option<Color>),
-    Arrow,
-    DoubleEndedArrow,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -629,7 +636,7 @@ mod tests {
     // fn test_arrow_endpoints_for_draw_for_all_in_dir_symmetrical() {
     //     let config = AutoNavVizGizmoConfigGroup {
     //         symmetrical_edge_spacing: 2.,
-    //         drawing_mode: AutoNavVizDrawMode::EnabledForAll,
+    //         draw_mode: AutoNavVizDrawMode::EnabledForAll,
     //         ..default()
     //     };
     //     let from_pos = Vec2::new(10., 0.);

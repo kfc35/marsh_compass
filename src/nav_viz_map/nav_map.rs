@@ -18,7 +18,7 @@ pub(crate) fn rebuild_nav_map(
     nav_map.clear();
 
     // Use the `auto_generate_navigation_edges` utility to generate the visualization
-    // map. It will find the best candidate in each direction for each node in `focusable_areas`,
+    // map. It will find the best candidate in each direction for each entity in `focusable_areas`,
     // using the same configuration that it uses in the `AutoDirectionalNavigator`.
     auto_generate_navigation_edges(nav_map, focusable_areas, config);
 

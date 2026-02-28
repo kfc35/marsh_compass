@@ -11,7 +11,10 @@ use bevy::math::CompassOctant;
 use bevy::platform::collections::HashSet;
 use bevy::prelude::*;
 use bevy::ui::auto_directional_navigation::{AutoDirectionalNavigation, AutoDirectionalNavigator};
-use bevy_auto_nav_viz::{AutoNavVizColorMode, AutoNavVizGizmoConfigGroup, AutoNavVizPlugin};
+use bevy_auto_nav_viz::{
+    AutoNavVizColorMode, AutoNavVizDrawMode, AutoNavVizGizmoConfigGroup, AutoNavVizPlugin,
+    SymmetricalEdgeSettings,
+};
 
 fn main() {
     App::new()
@@ -172,7 +175,27 @@ fn update_example(
     // update config
     let (_, group_config) = config_store.config_mut::<AutoNavVizGizmoConfigGroup>();
     if keyboard.just_pressed(Key::Character("1".into())) {
-        group_config.toggle_draw_mode();
+        group_config.draw_mode = match group_config.draw_mode {
+            AutoNavVizDrawMode::EnabledForCurrentFocus => {
+                AutoNavVizDrawMode::EnabledForAll(SymmetricalEdgeSettings::MergeAndGradient)
+            }
+            AutoNavVizDrawMode::EnabledForAll(symm_settings) => match symm_settings {
+                SymmetricalEdgeSettings::MergeAndGradient => AutoNavVizDrawMode::EnabledForAll(
+                    SymmetricalEdgeSettings::merge_and_mix_evenly(),
+                ),
+                SymmetricalEdgeSettings::MergeAndMix(_) => AutoNavVizDrawMode::EnabledForAll(
+                    SymmetricalEdgeSettings::SpacingBetweenSingleArrows,
+                ),
+                SymmetricalEdgeSettings::SpacingBetweenSingleArrows => {
+                    AutoNavVizDrawMode::EnabledForAll(
+                        SymmetricalEdgeSettings::OverlappingSingleArrows,
+                    )
+                }
+                SymmetricalEdgeSettings::OverlappingSingleArrows => {
+                    AutoNavVizDrawMode::EnabledForCurrentFocus
+                }
+            },
+        };
     }
     if keyboard.just_pressed(Key::Character("2".into())) {
         if colors_toggle.0 {

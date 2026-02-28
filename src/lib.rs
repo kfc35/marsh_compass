@@ -34,7 +34,7 @@
 //! fn setup(mut config_store: ResMut<GizmoConfigStore>) {
 //!     let mut config = config_store.config_mut::<AutoNavVizGizmoConfigGroup>().1;
 //!     // e.g.
-//!     config.drawing_mode = AutoNavVizDrawMode::EnabledForCurrentFocus;
+//!     config.draw_mode = AutoNavVizDrawMode::EnabledForCurrentFocus;
 //! }
 //! ```
 
@@ -51,7 +51,12 @@ pub use visualizer::*;
 ///
 /// This system set runs in the [`PostUpdate`] schedule after [`TransformSystems::Propagate`].
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct AutoNavVizSystems;
+pub enum AutoNavVizSystems {
+    /// The [`rebuild_nav_viz_map`] system.
+    BuildMap,
+    /// The [`draw_nav_viz`] system.
+    Draw,
+}
 
 /// A [`Plugin`] that adds visualizations for auto navigation systems.
 #[derive(Default)]
@@ -63,10 +68,12 @@ impl Plugin for AutoNavVizPlugin {
             .init_gizmo_group::<AutoNavVizGizmoConfigGroup>()
             .add_systems(
                 PostUpdate,
-                (nav_viz_map::rebuild_nav_viz_map, visualizer::draw_nav_viz)
+                (
+                    nav_viz_map::rebuild_nav_viz_map.in_set(AutoNavVizSystems::BuildMap),
+                    visualizer::draw_nav_viz.in_set(AutoNavVizSystems::Draw),
+                )
                     .chain()
-                    .after(TransformSystems::Propagate)
-                    .in_set(AutoNavVizSystems),
+                    .after(TransformSystems::Propagate),
             );
     }
 }
@@ -85,12 +92,15 @@ pub enum AutoNavVizDrawMode {
 }
 
 /// Setting for how to render symmetrical navigation edges when the
-/// whole auto navigation graph is drawn.
+/// whole auto navigation graph is drawn. This will include edges that
+/// may not be considered "symmetrical" by the navigation system itself,
+/// but would be overlapping visually (i.e. a drawn edge between the
+/// NE corner and NW corner of two nodes).
 #[derive(Clone, Copy, Debug, Default, Reflect, PartialEq)]
 pub enum SymmetricalEdgeSettings {
     /// Merge the two single ended arrows into one drawn double ended arrow.
     /// The color of the merged arrow is a gradient between the colors that
-    /// the arrows would have had as single arrows. The color of these single arrow
+    /// the arrows would have had as single arrows. The color of each single arrow
     /// is more prominent closer to their respective source entity in the combined arrow.
     #[default]
     MergeAndGradient,
@@ -117,9 +127,15 @@ impl SymmetricalEdgeSettings {
         Self::MergeAndMix(0.5)
     }
 
-    /// Returns whether this `SymmetricalEdgeSettings` is a Merge* variant.
+    /// Returns whether this [`SymmetricalEdgeSettings`] is a Merge* variant.
     pub fn is_merge(&self) -> bool {
         matches!(self, Self::MergeAndGradient | Self::MergeAndMix(_))
+    }
+
+    /// Returns whether this [`SymmetricalEdgeSettings`] is
+    /// [`SymmetricalEdgeSettings::OverlappingSingleArrows`]
+    pub fn is_overlap(&self) -> bool {
+        *self == Self::OverlappingSingleArrows
     }
 }
 
@@ -181,7 +197,7 @@ impl AutoNavVizColorMode {
 pub struct AutoNavVizGizmoConfigGroup {
     /// The drawing mode
     /// See [`AutoNavVizDrawMode`] for more details.
-    pub drawing_mode: AutoNavVizDrawMode,
+    pub draw_mode: AutoNavVizDrawMode,
 
     /// The coloring mode
     /// See [`AutoNavVizColorMode`] for more details.
@@ -225,7 +241,7 @@ pub struct AutoNavVizGizmoConfigGroup {
 impl Default for AutoNavVizGizmoConfigGroup {
     fn default() -> Self {
         Self {
-            drawing_mode: Default::default(),
+            draw_mode: Default::default(),
             color_mode: Default::default(),
             arrow_tip_length: 10.,
             // Yellow
@@ -261,11 +277,10 @@ impl Default for AutoNavVizGizmoConfigGroup {
 impl AutoNavVizGizmoConfigGroup {
     /// Toggles the draw mode, using the default values for each draw mode.
     pub fn toggle_draw_mode(&mut self) {
-        if self.drawing_mode == AutoNavVizDrawMode::EnabledForCurrentFocus {
-            self.drawing_mode =
-                AutoNavVizDrawMode::EnabledForAll(SymmetricalEdgeSettings::default());
+        if self.draw_mode == AutoNavVizDrawMode::EnabledForCurrentFocus {
+            self.draw_mode = AutoNavVizDrawMode::EnabledForAll(SymmetricalEdgeSettings::default());
         } else {
-            self.drawing_mode = AutoNavVizDrawMode::EnabledForCurrentFocus;
+            self.draw_mode = AutoNavVizDrawMode::EnabledForCurrentFocus;
         }
     }
 
