@@ -15,6 +15,7 @@ use std::f32::consts::PI;
 use bevy::input::keyboard::Key;
 use bevy::input_focus::{
     InputDispatchPlugin, InputFocus, InputFocusVisible,
+    directional_navigation::DirectionalNavigationMap,
     directional_navigation::DirectionalNavigationPlugin,
 };
 use bevy::math::CompassOctant;
@@ -34,6 +35,7 @@ fn main() {
         // Example specific resource
         .init_resource::<ActionState>()
         .init_resource::<TranslationToggle>()
+        .init_resource::<OrderedButtons>()
         // Add this plugin for the visualization to render.
         .add_plugins(AutoNavVizPlugin)
         .add_systems(Startup, setup)
@@ -43,6 +45,21 @@ fn main() {
         )
         .add_systems(Update, (highlight_input_focus, move_button))
         .run();
+}
+
+/// A resource used to cache the buttons in the specific setup ordering.
+/// Used to easily add overrides to the navigation map.
+#[derive(Resource, Deref, DerefMut)]
+struct OrderedButtons {
+    buttons: Vec<Entity>,
+}
+
+impl Default for OrderedButtons {
+    fn default() -> Self {
+        OrderedButtons {
+            buttons: Vec::with_capacity(9),
+        }
+    }
 }
 
 /// A marker component for the button that moves
@@ -59,7 +76,14 @@ impl Default for TranslationToggle {
     }
 }
 
-fn setup(mut commands: Commands, mut input_focus: ResMut<InputFocus>, window: Single<&Window>) {
+// TODO action that adds a symmetric looping edge.
+
+fn setup(
+    mut commands: Commands,
+    mut input_focus: ResMut<InputFocus>,
+    mut buttons: ResMut<OrderedButtons>,
+    window: Single<&Window>,
+) {
     commands.spawn(Camera2d);
 
     let root_id = commands
@@ -80,7 +104,8 @@ fn setup(mut commands: Commands, mut input_focus: ResMut<InputFocus>, window: Si
             },
             children![Text::new(
                 "Press `1` to toggle translation.\n\n\
-                Press `2` to toggle rotation."
+                Press `2` to toggle rotation.\n\n\
+                Press `3` to toggle manual looping edge E <-> W."
             ),],
         ))
         .id();
@@ -114,6 +139,9 @@ fn setup(mut commands: Commands, mut input_focus: ResMut<InputFocus>, window: Si
             ..default()
         },
     ));
+
+    buttons.push(center_button);
+    buttons.push(moving_button);
 }
 
 fn spawn_button(commands: &mut Commands, left_and_top: Vec2, name: &str) -> Entity {
@@ -177,6 +205,8 @@ fn process_toggles(
     keyboard: Res<ButtonInput<Key>>,
     mut translation_toggle: ResMut<TranslationToggle>,
     mut virtual_time: ResMut<Time<Virtual>>,
+    buttons: Res<OrderedButtons>,
+    mut override_map: ResMut<DirectionalNavigationMap>,
 ) -> Result {
     if keyboard.just_pressed(Key::Character("1".into())) {
         translation_toggle.0 ^= true;
@@ -186,6 +216,14 @@ fn process_toggles(
             virtual_time.unpause()
         } else {
             virtual_time.pause()
+        }
+    }
+
+    if keyboard.just_pressed(Key::Character("3".into())) {
+        if override_map.neighbors.is_empty() {
+            override_map.add_looping_edges(&[buttons[0], buttons[1]], CompassOctant::East);
+        } else {
+            override_map.clear();
         }
     }
 
