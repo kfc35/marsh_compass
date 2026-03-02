@@ -27,3 +27,6 @@ opt-level = 3
 
 [[example]]
 name = "settings"
+
+[[example]]
+name = "moving_button"

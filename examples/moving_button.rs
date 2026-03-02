@@ -6,7 +6,7 @@
 //! This example shows what the visualization can look with certain placements of buttons.
 //! This also shows the behavior of the auto navigation system itself, i.e.
 //! when and where it draws an edge from one button to the other.
-//! 
+//!
 //! NOTE: The visualization currently uses rotated axis aligned bounds, which can appear as
 //! empty padding between navigation arrows and a rotated entity. There
 //! is an issue to address this.
@@ -109,7 +109,7 @@ fn setup(mut commands: Commands, mut input_focus: ResMut<InputFocus>, window: Si
         UiTransform {
             translation: Val2 {
                 x: px(0.),
-                y: px(-200.),
+                y: px(-250.),
             },
             ..default()
         },

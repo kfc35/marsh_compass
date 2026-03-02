@@ -37,8 +37,14 @@ Examples are available in [examples](/examples).
 
 ### settings
 An example showcasing the different settings of the `AutoNavVizPlugin`
-available for customizing via the `AutoNavVizGizmoConfigGroup`. Use this
-basic example to figure out what settings you prefer for your use case.
+available for customizing via the `AutoNavVizGizmoConfigGroup`. Use this to figure out what settings you prefer for your use case.
+
+### moving_button
+An example showcasing what the visualization looks like with various
+placement of buttons through the use of a moving button.
+Use this to see what the visualization will look like (and, by extension,
+how the `AutoDirectionalNavigator` will behave) for more
+unusual placements of buttons.
 
 ## Version Table
 
