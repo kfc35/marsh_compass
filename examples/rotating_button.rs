@@ -6,6 +6,10 @@
 //! This example shows what the visualization can look with certain placements of buttons.
 //! This also shows the behavior of the auto navigation system itself, i.e.
 //! when and where it draws an edge from one button to the other.
+//! 
+//! NOTE: The visualization currently uses rotated axis aligned bounds, which can appear as
+//! empty padding between navigation arrows and a rotated entity. There
+//! is an issue to address this.
 use std::f32::consts::PI;
 
 use bevy::input::keyboard::Key;
@@ -75,8 +79,8 @@ fn setup(mut commands: Commands, mut input_focus: ResMut<InputFocus>, window: Si
                 ..default()
             },
             children![Text::new(
-                "Press `1` to toggle translation (movement around the center button)\n\n\
-                Press `2` to toggle rotation (rotation of the moving button itself)"
+                "Press `1` to toggle translation.\n\n\
+                Press `2` to toggle rotation."
             ),],
         ))
         .id();
@@ -105,7 +109,7 @@ fn setup(mut commands: Commands, mut input_focus: ResMut<InputFocus>, window: Si
         UiTransform {
             translation: Val2 {
                 x: px(0.),
-                y: px(-300.),
+                y: px(-200.),
             },
             ..default()
         },
