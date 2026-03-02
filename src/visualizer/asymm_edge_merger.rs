@@ -108,12 +108,12 @@ impl<'s> AsymmetricalStraightEdgeMerger<'s> {
                             .entity_viz_pos_data
                             .get(&meta_data.source_entity)
                             .expect("This succeeded when first making these edges")
-                            .size;
+                            .aabb_size;
                         let to_size = nav_viz_map
                             .entity_viz_pos_data
                             .get(&meta_data.destination_entity)
                             .expect("This succeeded when first making these edges")
-                            .size;
+                            .aabb_size;
 
                         let (start_nudge, end_nudge) = crate::get_nudge(
                             from_size,

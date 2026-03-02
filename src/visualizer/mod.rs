@@ -160,7 +160,7 @@ pub fn draw_nav_viz(
             let Some((from_pos, from_size)) = nav_viz_map
                 .entity_viz_pos_data
                 .get(entity)
-                .map(|fa| (fa.world_position, fa.size))
+                .map(|fa| (fa.get_center(), fa.aabb_size))
             else {
                 continue;
             };
@@ -170,7 +170,7 @@ pub fn draw_nav_viz(
             let Some((to_pos, to_size)) = nav_viz_map
                 .entity_viz_pos_data
                 .get(neighbor)
-                .map(|fa| (fa.world_position, fa.size))
+                .map(|fa| (fa.get_center(), fa.aabb_size))
             else {
                 // A future case to handle more appropriately, perhaps with a white arrow
                 // to indicate that it goes elsewhere.

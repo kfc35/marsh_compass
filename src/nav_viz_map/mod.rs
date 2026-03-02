@@ -35,6 +35,10 @@ pub struct NavVizMap {
     pub entity_viz_pos_data: EntityHashMap<NavVizPosData>,
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "This function will not be called directly. Its args are injected."
+)]
 /// A System that rebuilds the [`NavVizMap`] resource with the
 /// [`AutoDirectionalNavigation`] entities that share the camera with the current [`InputFocus`]
 /// and any manual edges defined in the [`DirectionalNavigationMap`] resource.
@@ -63,6 +67,7 @@ pub fn rebuild_nav_viz_map(
         With<AutoDirectionalNavigation>,
     >,
     camera_transform_query: Query<(&Camera, &GlobalTransform)>,
+    position_data_query: Query<(&ComputedNode, &UiGlobalTransform)>,
 ) {
     // Get the focusable areas related to the current focus and the entities
     // it shares the camera with. This is what the `AutoDirectionalNavigator`
@@ -99,5 +104,6 @@ pub fn rebuild_nav_viz_map(
         &mut nav_viz_map.entity_viz_pos_data,
         &focusable_areas,
         &viewport_to_world_2d,
+        position_data_query,
     );
 }
