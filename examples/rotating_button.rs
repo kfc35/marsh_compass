@@ -1,9 +1,14 @@
-//! An example showing a visualization rendered for two buttons. One button is located in the center,
-//! while the other rotates around it.
+//! An example showing the visualization rendered for two buttons:
+//! One button is located in the center of the window ("Center Button"),
+//! while the other moves around it ("Moving Button").
+//! The moving button also rotates.
 //!
-//! This showcases what the visualization can look like with odd angles.
-//!
+//! This example shows what the visualization can look with certain placements of buttons.
+//! This also shows the behavior of the auto navigation system itself, i.e.
+//! when and where it draws an edge from one button to the other.
+use std::f32::consts::PI;
 
+use bevy::input::keyboard::Key;
 use bevy::input_focus::{
     InputDispatchPlugin, InputFocus, InputFocusVisible,
     directional_navigation::DirectionalNavigationPlugin,
@@ -24,20 +29,35 @@ fn main() {
         .insert_resource(InputFocusVisible(true))
         // Example specific resource
         .init_resource::<ActionState>()
+        .init_resource::<TranslationToggle>()
         // Add this plugin for the visualization to render.
         .add_plugins(AutoNavVizPlugin)
         .add_systems(Startup, setup)
-        .add_systems(PreUpdate, (process_directional_inputs, navigate))
-        .add_systems(Update, highlight_input_focus)
+        .add_systems(
+            PreUpdate,
+            (process_directional_inputs, process_toggles, navigate),
+        )
+        .add_systems(Update, (highlight_input_focus, move_button))
         .run();
 }
 
+/// A marker component for the button that moves
 #[derive(Component)]
 struct MovingButton;
 
+/// A resource that denotes whether the [`MovingButton`] can move.
+#[derive(Resource)]
+struct TranslationToggle(bool);
+
+impl Default for TranslationToggle {
+    fn default() -> Self {
+        Self(true)
+    }
+}
+
 fn setup(mut commands: Commands, mut input_focus: ResMut<InputFocus>, window: Single<&Window>) {
-    let window_logical_size = window.resolution.size();
     commands.spawn(Camera2d);
+
     let root_id = commands
         .spawn((Node {
             width: percent(100),
@@ -46,6 +66,25 @@ fn setup(mut commands: Commands, mut input_focus: ResMut<InputFocus>, window: Si
         },))
         .id();
 
+    let rules_container = commands
+        .spawn((
+            Node {
+                left: px(20),
+                top: px(20),
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+            children![Text::new(
+                "Press `1` to toggle translation (movement around the center button)\n\n\
+                Press `2` to toggle rotation (rotation of the moving button itself)"
+            ),],
+        ))
+        .id();
+    commands.entity(root_id).add_child(rules_container);
+
+    let window_logical_size = window.resolution.size();
+
+    // Place in the middle of the screen, taking into account button size,
     let center_button = spawn_button(
         &mut commands,
         window_logical_size / 2. - 50.,
@@ -54,13 +93,13 @@ fn setup(mut commands: Commands, mut input_focus: ResMut<InputFocus>, window: Si
     commands.entity(root_id).add_child(center_button);
     input_focus.set(center_button);
 
-    // Place in the middle of the screen, taking into account button size,
     let moving_button = spawn_button(
         &mut commands,
         window_logical_size / 2. - 50.,
         "Moving Button",
     );
     commands.entity(root_id).add_child(moving_button);
+    // Translate the moving button to be 300px above the center button
     commands.entity(moving_button).insert((
         MovingButton,
         UiTransform {
@@ -100,6 +139,53 @@ fn spawn_button(commands: &mut Commands, left_and_top: Vec2, name: &str) -> Enti
             },
         ))
         .id()
+}
+
+fn move_button(
+    time: Res<Time<Virtual>>,
+    translation_toggle: Res<TranslationToggle>,
+    mut moving_button_query: Query<&mut UiTransform, With<MovingButton>>,
+) -> Result {
+    for mut transform in &mut moving_button_query {
+        // Translate the button to make it appear like it is rotating
+        // around the center
+        if translation_toggle.0 {
+            let (x, y) = if let Val::Px(x) = transform.translation.x
+                && let Val::Px(y) = transform.translation.y
+            {
+                (x, y)
+            } else {
+                panic!("UiTransform's translation must be defined in Px.");
+            };
+            let translation = Rot2::degrees(0.25) * Vec2::new(x, y);
+            transform.translation = Val2 {
+                x: px(translation.x),
+                y: px(translation.y),
+            }
+        }
+
+        transform.rotation = Rot2::radians(time.elapsed_secs() % (2. * PI));
+    }
+    Ok(())
+}
+
+fn process_toggles(
+    keyboard: Res<ButtonInput<Key>>,
+    mut translation_toggle: ResMut<TranslationToggle>,
+    mut virtual_time: ResMut<Time<Virtual>>,
+) -> Result {
+    if keyboard.just_pressed(Key::Character("1".into())) {
+        translation_toggle.0 ^= true;
+    }
+    if keyboard.just_pressed(Key::Character("2".into())) {
+        if virtual_time.is_paused() {
+            virtual_time.unpause()
+        } else {
+            virtual_time.pause()
+        }
+    }
+
+    Ok(())
 }
 
 // The input focus always has a white border.
