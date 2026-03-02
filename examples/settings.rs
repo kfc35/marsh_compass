@@ -296,11 +296,11 @@ fn update_example(
     mut override_map: ResMut<DirectionalNavigationMap>,
     real_time: Res<Time<Real>>,
     mut get_text_param: GetTextParam,
-) {
+) -> Result {
     // update config
     let (_, group_config) = config_store.config_mut::<AutoNavVizGizmoConfigGroup>();
     if keyboard.just_pressed(Key::Character("1".into())) {
-        let mut draw_mode_text = get_text_param.draw_mode_query.single_mut().unwrap();
+        let mut draw_mode_text = get_text_param.draw_mode_query.single_mut()?;
         group_config.draw_mode = match group_config.draw_mode {
             AutoNavVizDrawMode::EnabledForCurrentFocus => {
                 draw_mode_text.0 = "Draw Mode: Enabled For All - Merge and Gradient\n\n".into();
@@ -336,7 +336,7 @@ fn update_example(
         };
     }
     if keyboard.just_pressed(Key::Character("2".into())) {
-        let mut directional_colors_text = get_text_param.dir_color_query.single_mut().unwrap();
+        let mut directional_colors_text = get_text_param.dir_color_query.single_mut()?;
         if colors_toggle.0 {
             group_config.set_directional_colors_to_defaults();
             colors_toggle.0 = false;
@@ -348,7 +348,7 @@ fn update_example(
         }
     }
     if keyboard.just_pressed(Key::Character("3".into())) {
-        let mut color_mode_text = get_text_param.color_mode_query.single_mut().unwrap();
+        let mut color_mode_text = get_text_param.color_mode_query.single_mut()?;
         group_config.color_mode = match group_config.color_mode {
             AutoNavVizColorMode::DirectionalOnly => {
                 color_mode_text.0 =
@@ -388,7 +388,7 @@ fn update_example(
 
     // update example
     if keyboard.just_pressed(Key::Character("l".into())) {
-        let mut looping_edges_text = get_text_param.looping_edges_query.single_mut().unwrap();
+        let mut looping_edges_text = get_text_param.looping_edges_query.single_mut()?;
         if override_map.neighbors.is_empty() {
             for row in 0..3 {
                 override_map.add_looping_edges(&buttons[row * 3..row * 3 + 3], CompassOctant::East);
@@ -411,6 +411,7 @@ fn update_example(
             looping_edges_text.0 = "Looping Edges: Inactive\n\n".into();
         }
     }
+    Ok(())
 }
 
 // Below is some boilerplate from the directional_navigation.rs example in `Bevy`
