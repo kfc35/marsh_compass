@@ -105,7 +105,8 @@ fn setup(
             children![Text::new(
                 "Press `1` to toggle translation.\n\n\
                 Press `2` to toggle rotation.\n\n\
-                Press `3` to toggle manual looping edge E <-> W."
+                Press `3` to toggle manual looping edge E <-> W.\n\n\
+                Use the D-Pad or Arrow Keys to navigate."
             ),],
         ))
         .id();
