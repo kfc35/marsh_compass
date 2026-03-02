@@ -109,7 +109,8 @@ fn get_rotation_and_obb_size(
         .map_or(None, |(computed, transform)| {
             let (scale, angle, _) = transform.to_scale_angle_translation();
             let obb_size = computed.size() * computed.inverse_scale_factor() * scale;
-            let rotation = Rot2::radians(angle);
+            // This is -angle because UiTransform defines rotations clockwise.
+            let rotation = Rot2::radians(-angle);
             Some((rotation, obb_size))
         })
 }
