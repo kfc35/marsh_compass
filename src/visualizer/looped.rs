@@ -122,160 +122,135 @@ pub(crate) fn calculate_arc(
     // The radius length is 1/2 the arc diameter. So, the radius must be
     // at most 1/12 the length of a side.
     let radius = pos_data.obb_size / 12.;
-    let translation_local_nudge = if mirror { -radius } else { radius };
-    let line_start_local = pos_data.world_to_local(line_start);
+    let nudge = if mirror { -radius } else { radius };
     match dir_of_point {
         CompassOctant::North => (
             draw_line_data,
             DrawArcData {
                 isometry: Isometry2d {
                     rotation: Rot2::radians(PI + FRAC_PI_2),
-                    translation: pos_data.local_to_world(Vec2::new(
-                        line_start_local.x - translation_local_nudge.x,
-                        line_start_local.y,
-                    )),
+                    translation: Vec2::new(line_start.x - nudge.x, line_start.y),
                 },
                 arc_angle: PI,
                 radius: radius.x,
                 color,
             },
-            pos_data.local_to_world(Vec2::new(
-                line_start_local.x - 2. * translation_local_nudge.x,
-                line_start_local.y,
-            )),
+            Vec2::new(line_start.x - 2. * nudge.x, line_start.y),
         ),
         CompassOctant::NorthEast => (
             draw_line_data,
             DrawArcData {
                 isometry: Isometry2d {
                     rotation: Rot2::radians(PI + FRAC_PI_4),
-                    translation: pos_data.local_to_world(Vec2::new(
-                        line_start_local.x - translation_local_nudge.x / SQRT_2,
-                        line_start_local.y + translation_local_nudge.x / SQRT_2,
-                    )),
+                    translation: Vec2::new(
+                        line_start.x - nudge.x / SQRT_2,
+                        line_start.y + nudge.x / SQRT_2,
+                    ),
                 },
                 arc_angle: PI,
                 radius: radius.x,
                 color,
             },
-            pos_data.local_to_world(Vec2::new(
-                line_start_local.x - 2. * translation_local_nudge.x / SQRT_2,
-                line_start_local.y + 2. * translation_local_nudge.x / SQRT_2,
-            )),
+            Vec2::new(
+                line_start.x - 2. * nudge.x / SQRT_2,
+                line_start.y + 2. * nudge.x / SQRT_2,
+            ),
         ),
         CompassOctant::East => (
             draw_line_data,
             DrawArcData {
                 isometry: Isometry2d {
                     rotation: Rot2::PI,
-                    translation: pos_data.local_to_world(Vec2::new(
-                        line_start_local.x,
-                        line_start_local.y + translation_local_nudge.y,
-                    )),
+                    translation: Vec2::new(line_start.x, line_start.y + nudge.y),
                 },
                 arc_angle: PI,
                 radius: radius.y,
                 color,
             },
-            pos_data.local_to_world(Vec2::new(
-                line_start_local.x,
-                line_start_local.y + 2. * translation_local_nudge.y,
-            )),
+            Vec2::new(line_start.x, line_start.y + 2. * nudge.y),
         ),
         CompassOctant::SouthEast => (
             draw_line_data,
             DrawArcData {
                 isometry: Isometry2d {
                     rotation: Rot2::radians(FRAC_PI_2 + FRAC_PI_4),
-                    translation: pos_data.local_to_world(Vec2::new(
-                        line_start_local.x + translation_local_nudge.y / SQRT_2,
-                        line_start_local.y + translation_local_nudge.y / SQRT_2,
-                    )),
+                    translation: Vec2::new(
+                        line_start.x + nudge.y / SQRT_2,
+                        line_start.y + nudge.y / SQRT_2,
+                    ),
                 },
                 arc_angle: PI,
                 radius: radius.y,
                 color,
             },
-            pos_data.local_to_world(Vec2::new(
-                line_start_local.x + 2. * translation_local_nudge.y / SQRT_2,
-                line_start_local.y + 2. * translation_local_nudge.y / SQRT_2,
-            )),
+            Vec2::new(
+                line_start.x + 2. * nudge.y / SQRT_2,
+                line_start.y + 2. * nudge.y / SQRT_2,
+            ),
         ),
         CompassOctant::South => (
             draw_line_data,
             DrawArcData {
                 isometry: Isometry2d {
                     rotation: Rot2::FRAC_PI_2,
-                    translation: pos_data.local_to_world(Vec2::new(
-                        line_start_local.x + translation_local_nudge.x,
-                        line_start_local.y,
-                    )),
+                    translation: Vec2::new(line_start.x + nudge.x, line_start.y),
                 },
                 arc_angle: PI,
                 radius: radius.x,
                 color,
             },
-            pos_data.local_to_world(Vec2::new(
-                line_start_local.x + 2. * translation_local_nudge.x,
-                line_start_local.y,
-            )),
+            Vec2::new(line_start.x + 2. * nudge.x, line_start.y),
         ),
         CompassOctant::SouthWest => (
             draw_line_data,
             DrawArcData {
                 isometry: Isometry2d {
                     rotation: Rot2::FRAC_PI_4,
-                    translation: pos_data.local_to_world(Vec2::new(
-                        line_start_local.x + translation_local_nudge.x / SQRT_2,
-                        line_start_local.y - translation_local_nudge.x / SQRT_2,
-                    )),
+                    translation: Vec2::new(
+                        line_start.x + nudge.x / SQRT_2,
+                        line_start.y - nudge.x / SQRT_2,
+                    ),
                 },
                 arc_angle: PI,
                 radius: radius.x,
                 color,
             },
-            pos_data.local_to_world(Vec2::new(
-                line_start_local.x + 2. * translation_local_nudge.x / SQRT_2,
-                line_start_local.y - 2. * translation_local_nudge.x / SQRT_2,
-            )),
+            Vec2::new(
+                line_start.x + 2. * nudge.x / SQRT_2,
+                line_start.y - 2. * nudge.x / SQRT_2,
+            ),
         ),
         CompassOctant::West => (
             draw_line_data,
             DrawArcData {
                 isometry: Isometry2d {
                     rotation: Rot2::IDENTITY,
-                    translation: pos_data.local_to_world(Vec2::new(
-                        line_start_local.x,
-                        line_start_local.y - translation_local_nudge.y,
-                    )),
+                    translation: Vec2::new(line_start.x, line_start.y - nudge.y),
                 },
                 arc_angle: PI,
                 radius: radius.y,
                 color,
             },
-            pos_data.local_to_world(Vec2::new(
-                line_start_local.x,
-                line_start_local.y - 2. * translation_local_nudge.y,
-            )),
+            Vec2::new(line_start.x, line_start.y - 2. * nudge.y),
         ),
         CompassOctant::NorthWest => (
             draw_line_data,
             DrawArcData {
                 isometry: Isometry2d {
                     rotation: Rot2::radians(-FRAC_PI_4),
-                    translation: pos_data.local_to_world(Vec2::new(
-                        line_start_local.x - translation_local_nudge.y / SQRT_2,
-                        line_start_local.y - translation_local_nudge.y / SQRT_2,
-                    )),
+                    translation: Vec2::new(
+                        line_start.x - nudge.y / SQRT_2,
+                        line_start.y - nudge.y / SQRT_2,
+                    ),
                 },
                 arc_angle: PI,
                 radius: radius.y,
                 color,
             },
-            pos_data.local_to_world(Vec2::new(
-                line_start_local.x - 2. * translation_local_nudge.y / SQRT_2,
-                line_start_local.y - 2. * translation_local_nudge.y / SQRT_2,
-            )),
+            Vec2::new(
+                line_start.x - 2. * nudge.y / SQRT_2,
+                line_start.y - 2. * nudge.y / SQRT_2,
+            ),
         ),
     }
 }
