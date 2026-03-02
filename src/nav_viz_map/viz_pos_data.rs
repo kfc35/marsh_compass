@@ -6,6 +6,7 @@ use bevy::prelude::*;
 
 /// The data needed to determine where to draw a visualization
 /// element within the window.
+#[derive(Clone, Copy, PartialEq)]
 pub struct NavVizPosData {
     /// The width and height of this entity's axis-aligned bounding box in
     /// the world. This does not hug tightly to the node.

@@ -3,7 +3,10 @@ use bevy::input_focus::{InputFocus, directional_navigation::NavNeighbors};
 use bevy::math::CompassOctant;
 use bevy::prelude::*;
 
-use crate::{AutoNavVizDrawMode, AutoNavVizGizmoConfigGroup, NavVizMap, SymmetricalEdgeSettings};
+use crate::{
+    AutoNavVizDrawMode, AutoNavVizGizmoConfigGroup, NavVizMap, NavVizPosData,
+    SymmetricalEdgeSettings,
+};
 
 mod asymm_edge_merger;
 mod looped;
@@ -157,21 +160,13 @@ pub fn draw_nav_viz(
             let Some(neighbor) = maybe_neighbor else {
                 continue;
             };
-            let Some((from_pos, from_size)) = nav_viz_map
-                .entity_viz_pos_data
-                .get(entity)
-                .map(|fa| (fa.get_center(), fa.aabb_size))
-            else {
+            let Some(from_pos_data) = nav_viz_map.entity_viz_pos_data.get(entity) else {
                 continue;
             };
             let Some(dir) = CompassOctant::from_index(i) else {
                 continue;
             };
-            let Some((to_pos, to_size)) = nav_viz_map
-                .entity_viz_pos_data
-                .get(neighbor)
-                .map(|fa| (fa.get_center(), fa.aabb_size))
-            else {
+            let Some(to_pos_data) = nav_viz_map.entity_viz_pos_data.get(neighbor) else {
                 // A future case to handle more appropriately, perhaps with a white arrow
                 // to indicate that it goes elsewhere.
                 // A text gizmo could also be used here to indicate where it goes
@@ -194,9 +189,9 @@ pub fn draw_nav_viz(
                 .or_insert(Oklcha::sequential_dispersed(neighbor.index_u32()).into());
 
             let (meta_data, draw_data) = get_nav_viz_draw_data(
-                (*entity, from_pos, from_size, from_color),
+                (*entity, from_pos_data, from_color),
                 dir,
-                (*neighbor, to_pos, to_size, to_color),
+                (*neighbor, to_pos_data, to_color),
                 nav_edge_is_symmetrical,
                 config,
             );
@@ -251,24 +246,24 @@ pub fn draw_nav_viz(
 /// This function decides the most appropriate way to visualize the navigation edge and
 /// returns all of the data needed to draw the edge via [`Gizmos`].
 fn get_nav_viz_draw_data(
-    (from_entity, from_pos, from_size, from_color): (Entity, Vec2, Vec2, Color),
+    (from_entity, from_pos_data, from_color): (Entity, &NavVizPosData, Color),
     dir: CompassOctant,
-    (to_entity, to_pos, to_size, to_color): (Entity, Vec2, Vec2, Color),
+    (to_entity, to_pos_data, to_color): (Entity, &NavVizPosData, Color),
     is_symmetrical: bool,
     config: &AutoNavVizGizmoConfigGroup,
 ) -> (NavVizDrawMetaData, NavVizDrawData) {
-    let mut start = get_point_in_direction(from_pos, from_size, dir);
+    let mut start = from_pos_data.get_point_in_direction(dir);
     // TODO this logic needs to be refined
     // It is flawed when the button rotates around
     // You should get the closest point that is still in the direction of dir.
     // Only when all the points are not in the direction of dir can you return the closest point
-    let (mut end, mut end_dir) = get_closest_point_in_dir(to_pos, to_size, start, dir);
+    let (mut end, mut end_dir) = get_closest_point_in_dir(to_pos_data, start, dir);
     let arrow_must_reverse = !dir.is_in_direction(start, end);
     if arrow_must_reverse {
         // The arrow will wrap around the target entity and point to its opposite side.
         // This looks better and conveys the "looping" nature of this navigation path.
         end_dir = end_dir.opposite();
-        end = get_point_in_direction(to_pos, to_size, end_dir);
+        end = to_pos_data.get_point_in_direction(end_dir);
     }
 
     let mut line_type = DrawLineType::Arrow;
@@ -280,10 +275,15 @@ fn get_nav_viz_draw_data(
     if is_symmetrical
         && let AutoNavVizDrawMode::EnabledForAll(symm_edge_settings) = config.draw_mode
     {
-        let (start_nudge, end_nudge) =
-            get_nudge(from_size, dir, to_size, end_dir, symm_edge_settings);
-        start += start_nudge;
-        end += end_nudge;
+        let (start_nudge, end_nudge) = get_local_nudge(
+            from_pos_data.obb_size,
+            dir,
+            to_pos_data.obb_size,
+            end_dir,
+            symm_edge_settings,
+        );
+        start += from_pos_data.local_to_world(start_nudge);
+        end += to_pos_data.local_to_world(end_nudge);
         if symm_edge_settings.is_merge() {
             // Update the `end_color` to what the opposite arrow would have been colored.
             end_color = config.get_color_for_direction(to_color, from_color, end_dir);
@@ -309,8 +309,8 @@ fn get_nav_viz_draw_data(
         (
             meta_data,
             looped::new_looped_draw_data(
-                (start, from_size, dir, start_color),
-                (end, to_size, end_dir, end_color),
+                (start, from_pos_data, dir, start_color),
+                (end, to_pos_data, end_dir, end_color),
                 start_line_is_arrow,
                 override_color,
                 config,
@@ -371,28 +371,31 @@ fn get_nav_viz_draw_data(
 }
 
 /// Returns a nudge to be applied to the `start` and `end` of the drawn edge
+/// in each entity's local units
 /// if `symm_edge_settings` is [`SymmetricalEdgeSettings::SpacingBetweenSingleArrows`].
 ///
 /// The returned nudge is proportional to the sizes of the entities.
 /// Nudge is calculated counter-clockwise for the source entity and clockwise
 /// for the destination entity.
-pub(crate) fn get_nudge(
-    from_size: Vec2,
+pub(crate) fn get_local_nudge(
+    from_local_size: Vec2,
     start_dir: CompassOctant,
-    to_size: Vec2,
+    to_local_size: Vec2,
     end_dir: CompassOctant,
     symm_edge_settings: SymmetricalEdgeSettings,
 ) -> (Vec2, Vec2) {
     let start_nudge_units = match symm_edge_settings {
-        SymmetricalEdgeSettings::SpacingBetweenSingleArrows => from_size / 16.,
+        SymmetricalEdgeSettings::SpacingBetweenSingleArrows => from_local_size / 16.,
         _ => Vec2::ZERO,
     };
     let end_nudge_units = match symm_edge_settings {
-        SymmetricalEdgeSettings::SpacingBetweenSingleArrows => to_size / 16.,
+        SymmetricalEdgeSettings::SpacingBetweenSingleArrows => to_local_size / 16.,
         _ => Vec2::ZERO,
     };
     let mut start_nudge = Vec2::ZERO;
     let mut end_nudge = Vec2::ZERO;
+    // TODO the nudge looks different. These nudges must be converted to OBB
+    // and then
     match start_dir {
         CompassOctant::North => {
             // Nudge West
@@ -465,20 +468,19 @@ pub(crate) fn get_nudge(
     (start_nudge, end_nudge)
 }
 
-/// Returns a point and direction of the point on the rectangle
-/// defined by its center `pos` and `size`. This point is closest in distance
+/// Returns a point and direction of the point on the entity'srectangle
+/// defined by `pos_data`. This point is closest in distance
 /// squared to `point` compared to the other points in the seven other [`CompassOctant`]
 /// directions. Ideally, it is also in the desired direction `dir` from `point`.
 ///
 /// If there is no point that is also in the direction of dir, it returns the closest point.
 fn get_closest_point_in_dir(
-    pos: Vec2,
-    size: Vec2,
+    pos_data: &NavVizPosData,
     point: Vec2,
     in_dir: CompassOctant,
 ) -> (Vec2, CompassOctant) {
     let mut closest_dir = CompassOctant::North;
-    let mut closest_point = get_point_in_direction(pos, size, closest_dir);
+    let mut closest_point = pos_data.get_point_in_direction(closest_dir);
     let mut squared_dist = closest_point.distance_squared(point);
     let mut closest_point_is_in_dir = in_dir.is_in_direction(point, closest_point);
     for dir in [
@@ -490,7 +492,7 @@ fn get_closest_point_in_dir(
         CompassOctant::West,
         CompassOctant::NorthWest,
     ] {
-        let candidate = get_point_in_direction(pos, size, dir);
+        let candidate = pos_data.get_point_in_direction(dir);
         let candidate_dist = candidate.distance_squared(point);
         let candidate_is_in_dir = in_dir.is_in_direction(point, candidate);
         // If all candidates are not in_dir, this will return the closest point that is not in_dir
@@ -506,20 +508,6 @@ fn get_closest_point_in_dir(
         }
     }
     (closest_point, closest_dir)
-}
-
-/// Returns the point on the rectangle defined by its center `pos` and `size` that is in the direction of `dir`.
-fn get_point_in_direction(pos: Vec2, size: Vec2, dir: CompassOctant) -> Vec2 {
-    match dir {
-        CompassOctant::North => pos + Vec2::new(0., size.y / 2.),
-        CompassOctant::NorthEast => pos + (size / 2.),
-        CompassOctant::East => pos + Vec2::new(size.x / 2., 0.),
-        CompassOctant::SouthEast => pos + (Vec2::new(size.x, -size.y) / 2.),
-        CompassOctant::South => pos + Vec2::new(0., -size.y / 2.),
-        CompassOctant::SouthWest => pos - (size / 2.),
-        CompassOctant::West => pos + Vec2::new(-size.x / 2., 0.),
-        CompassOctant::NorthWest => pos + (Vec2::new(-size.x, size.y) / 2.),
-    }
 }
 
 /// Given a [`DrawLineData`], draws a line or arrow via gizmos.

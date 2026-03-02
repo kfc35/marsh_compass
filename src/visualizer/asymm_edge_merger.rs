@@ -104,24 +104,24 @@ impl<'s> AsymmetricalStraightEdgeMerger<'s> {
                     } else {
                         // symm_edge_settings = SpacingBetweenTwoArrows
                         // Must apply nudging to visibly see two arrows.
-                        let from_size = nav_viz_map
+                        let from_pos_data = nav_viz_map
                             .entity_viz_pos_data
                             .get(&meta_data.source_entity)
-                            .expect("This succeeded when first making these edges")
-                            .aabb_size;
-                        let to_size = nav_viz_map
+                            .expect("This succeeded when first making these edges");
+                        let to_pos_data = nav_viz_map
                             .entity_viz_pos_data
                             .get(&meta_data.destination_entity)
-                            .expect("This succeeded when first making these edges")
-                            .aabb_size;
+                            .expect("This succeeded when first making these edges");
 
-                        let (start_nudge, end_nudge) = crate::get_nudge(
-                            from_size,
+                        let (start_local_nudge, end_local_nudge) = crate::get_local_nudge(
+                            from_pos_data.obb_size,
                             meta_data.source_direction,
-                            to_size,
+                            to_pos_data.obb_size,
                             meta_data.destination_direction,
                             symm_edge_settings,
                         );
+                        let start_nudge = from_pos_data.local_to_world(start_local_nudge);
+                        let end_nudge = to_pos_data.local_to_world(end_local_nudge);
 
                         edge[0].start += start_nudge;
                         edge[0].end += start_nudge;
