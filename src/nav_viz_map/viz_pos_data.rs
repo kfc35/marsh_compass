@@ -62,6 +62,12 @@ impl NavVizPosData {
     pub fn world_to_local(&self, world_point: Vec2) -> Vec2 {
         self.transformation.inverse() * world_point
     }
+
+    /// Applies a translation written in this entity's local coordinates to a world coordinate.
+    /// Returns the translated point in world_coordinates.
+    pub fn apply_local_translation(&self, world_point: Vec2, local_nudge: Vec2) -> Vec2 {
+        self.local_to_world(self.world_to_local(world_point) + local_nudge)
+    }
 }
 
 /// Rebuilds the `entity_viz_data` field in [`NavVizMap`](crate::nav_viz_map::NavVizMap).

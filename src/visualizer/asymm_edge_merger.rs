@@ -120,15 +120,19 @@ impl<'s> AsymmetricalStraightEdgeMerger<'s> {
                             meta_data.destination_direction,
                             symm_edge_settings,
                         );
-                        let start_nudge = from_pos_data.local_to_world(start_local_nudge);
-                        let end_nudge = to_pos_data.local_to_world(end_local_nudge);
 
-                        edge[0].start += start_nudge;
-                        edge[0].end += start_nudge;
-                        edge[1].start += start_nudge;
-                        edge[1].end += end_nudge;
-                        edge[2].start += end_nudge;
-                        edge[2].end += end_nudge;
+                        edge[0].start =
+                            from_pos_data.apply_local_translation(edge[0].start, start_local_nudge);
+                        edge[0].end =
+                            from_pos_data.apply_local_translation(edge[0].end, start_local_nudge);
+                        edge[1].start =
+                            from_pos_data.apply_local_translation(edge[1].start, start_local_nudge);
+                        edge[1].end =
+                            to_pos_data.apply_local_translation(edge[1].end, end_local_nudge);
+                        edge[2].start =
+                            to_pos_data.apply_local_translation(edge[2].start, end_local_nudge);
+                        edge[2].end =
+                            to_pos_data.apply_local_translation(edge[2].end, end_local_nudge);
 
                         for line_data in edge {
                             self.line_data_to_draw.push(line_data);

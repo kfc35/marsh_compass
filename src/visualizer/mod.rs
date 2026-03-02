@@ -253,10 +253,6 @@ fn get_nav_viz_draw_data(
     config: &AutoNavVizGizmoConfigGroup,
 ) -> (NavVizDrawMetaData, NavVizDrawData) {
     let mut start = from_pos_data.get_point_in_direction(dir);
-    // TODO this logic needs to be refined
-    // It is flawed when the button rotates around
-    // You should get the closest point that is still in the direction of dir.
-    // Only when all the points are not in the direction of dir can you return the closest point
     let (mut end, mut end_dir) = get_closest_point_in_dir(to_pos_data, start, dir);
     let arrow_must_reverse = !dir.is_in_direction(start, end);
     if arrow_must_reverse {
@@ -275,15 +271,15 @@ fn get_nav_viz_draw_data(
     if is_symmetrical
         && let AutoNavVizDrawMode::EnabledForAll(symm_edge_settings) = config.draw_mode
     {
-        let (start_nudge, end_nudge) = get_local_nudge(
+        let (start_local_nudge, end_local_nudge) = get_local_nudge(
             from_pos_data.obb_size,
             dir,
             to_pos_data.obb_size,
             end_dir,
             symm_edge_settings,
         );
-        start += from_pos_data.local_to_world(start_nudge);
-        end += to_pos_data.local_to_world(end_nudge);
+        start = from_pos_data.apply_local_translation(start, start_local_nudge);
+        end = to_pos_data.apply_local_translation(end, end_local_nudge);
         if symm_edge_settings.is_merge() {
             // Update the `end_color` to what the opposite arrow would have been colored.
             end_color = config.get_color_for_direction(to_color, from_color, end_dir);
@@ -394,8 +390,6 @@ pub(crate) fn get_local_nudge(
     };
     let mut start_nudge = Vec2::ZERO;
     let mut end_nudge = Vec2::ZERO;
-    // TODO the nudge looks different. These nudges must be converted to OBB
-    // and then
     match start_dir {
         CompassOctant::North => {
             // Nudge West
@@ -468,12 +462,13 @@ pub(crate) fn get_local_nudge(
     (start_nudge, end_nudge)
 }
 
-/// Returns a point and direction of the point on the entity'srectangle
+/// Returns a point and direction of the point on the entity's rectangle
 /// defined by `pos_data`. This point is closest in distance
 /// squared to `point` compared to the other points in the seven other [`CompassOctant`]
 /// directions. Ideally, it is also in the desired direction `dir` from `point`.
 ///
-/// If there is no point that is also in the direction of dir, it returns the closest point.
+/// If there is no point that is also in the direction of dir, it returns the closest point
+/// regardless.
 fn get_closest_point_in_dir(
     pos_data: &NavVizPosData,
     point: Vec2,
