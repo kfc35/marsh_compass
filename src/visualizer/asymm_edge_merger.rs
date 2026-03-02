@@ -104,31 +104,35 @@ impl<'s> AsymmetricalStraightEdgeMerger<'s> {
                     } else {
                         // symm_edge_settings = SpacingBetweenTwoArrows
                         // Must apply nudging to visibly see two arrows.
-                        let from_size = nav_viz_map
+                        let from_pos_data = nav_viz_map
                             .entity_viz_pos_data
                             .get(&meta_data.source_entity)
-                            .expect("This succeeded when first making these edges")
-                            .size;
-                        let to_size = nav_viz_map
+                            .expect("This succeeded when first making these edges");
+                        let to_pos_data = nav_viz_map
                             .entity_viz_pos_data
                             .get(&meta_data.destination_entity)
-                            .expect("This succeeded when first making these edges")
-                            .size;
+                            .expect("This succeeded when first making these edges");
 
-                        let (start_nudge, end_nudge) = crate::get_nudge(
-                            from_size,
+                        let (start_local_nudge, end_local_nudge) = crate::get_local_nudge(
+                            from_pos_data.obb_size,
                             meta_data.source_direction,
-                            to_size,
+                            to_pos_data.obb_size,
                             meta_data.destination_direction,
                             symm_edge_settings,
                         );
 
-                        edge[0].start += start_nudge;
-                        edge[0].end += start_nudge;
-                        edge[1].start += start_nudge;
-                        edge[1].end += end_nudge;
-                        edge[2].start += end_nudge;
-                        edge[2].end += end_nudge;
+                        edge[0].start =
+                            from_pos_data.apply_local_translation(edge[0].start, start_local_nudge);
+                        edge[0].end =
+                            from_pos_data.apply_local_translation(edge[0].end, start_local_nudge);
+                        edge[1].start =
+                            from_pos_data.apply_local_translation(edge[1].start, start_local_nudge);
+                        edge[1].end =
+                            to_pos_data.apply_local_translation(edge[1].end, end_local_nudge);
+                        edge[2].start =
+                            to_pos_data.apply_local_translation(edge[2].start, end_local_nudge);
+                        edge[2].end =
+                            to_pos_data.apply_local_translation(edge[2].end, end_local_nudge);
 
                         for line_data in edge {
                             self.line_data_to_draw.push(line_data);

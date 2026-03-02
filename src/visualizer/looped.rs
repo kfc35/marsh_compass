@@ -5,7 +5,7 @@ use bevy::prelude::*;
 
 use crate::{
     AutoNavVizGizmoConfigGroup, DrawArcData, DrawLineData, DrawLineType, DrawLoopedLineData,
-    NavVizDrawData,
+    NavVizDrawData, NavVizPosData,
 };
 
 /// Returns a [`NavVizDrawData`] representing a [`NavVizDrawData::Looped`], a navigation edge
@@ -16,8 +16,13 @@ use crate::{
 /// if `override_color` is `Some(Color)`, the draw data will be that color.
 /// If `None`, it will be a gradient between `from_color` and `to_color`.
 pub(crate) fn new_looped_draw_data(
-    (start_point, from_size, start_point_dir, from_color): (Vec2, Vec2, CompassOctant, Color),
-    (end_point, to_size, end_point_dir, to_color): (Vec2, Vec2, CompassOctant, Color),
+    (start_point, from_pos_data, start_point_dir, from_color): (
+        Vec2,
+        &NavVizPosData,
+        CompassOctant,
+        Color,
+    ),
+    (end_point, to_pos_data, end_point_dir, to_color): (Vec2, &NavVizPosData, CompassOctant, Color),
     start_line_is_arrow: bool,
     override_color: Option<Color>,
     config: &AutoNavVizGizmoConfigGroup,
@@ -30,7 +35,7 @@ pub(crate) fn new_looped_draw_data(
     };
     let (start_line, start_arc, line_start) = calculate_arc(
         start_point,
-        from_size,
+        from_pos_data,
         start_point_dir,
         false,
         override_color.unwrap_or(from_color),
@@ -40,7 +45,7 @@ pub(crate) fn new_looped_draw_data(
     // The ending arc should always end in an arrow
     let (end_line, end_arc, line_end) = calculate_arc(
         end_point,
-        to_size,
+        to_pos_data,
         end_point_dir,
         true,
         override_color.unwrap_or(to_color),
@@ -89,7 +94,7 @@ pub(crate) fn new_looped_draw_data(
 /// line_type should also be set to [`DrawLineType::Arrow`].
 pub(crate) fn calculate_arc(
     point: Vec2,
-    size: Vec2,
+    pos_data: &NavVizPosData,
     dir_of_point: CompassOctant,
     mirror: bool,
     color: Color,
@@ -116,21 +121,21 @@ pub(crate) fn calculate_arc(
     // 6 arcs per side to account for these permutations.
     // The radius length is 1/2 the arc diameter. So, the radius must be
     // at most 1/12 the length of a side.
-    let radius = size / 12.;
-    let translation_nudge = if mirror { -radius } else { radius };
+    let radius = pos_data.obb_size / 12.;
+    let nudge = if mirror { -radius } else { radius };
     match dir_of_point {
         CompassOctant::North => (
             draw_line_data,
             DrawArcData {
                 isometry: Isometry2d {
                     rotation: Rot2::radians(PI + FRAC_PI_2),
-                    translation: Vec2::new(line_start.x - translation_nudge.x, line_start.y),
+                    translation: Vec2::new(line_start.x - nudge.x, line_start.y),
                 },
                 arc_angle: PI,
                 radius: radius.x,
                 color,
             },
-            Vec2::new(line_start.x - 2. * translation_nudge.x, line_start.y),
+            Vec2::new(line_start.x - 2. * nudge.x, line_start.y),
         ),
         CompassOctant::NorthEast => (
             draw_line_data,
@@ -138,8 +143,8 @@ pub(crate) fn calculate_arc(
                 isometry: Isometry2d {
                     rotation: Rot2::radians(PI + FRAC_PI_4),
                     translation: Vec2::new(
-                        line_start.x - translation_nudge.x / SQRT_2,
-                        line_start.y + translation_nudge.x / SQRT_2,
+                        line_start.x - nudge.x / SQRT_2,
+                        line_start.y + nudge.x / SQRT_2,
                     ),
                 },
                 arc_angle: PI,
@@ -147,8 +152,8 @@ pub(crate) fn calculate_arc(
                 color,
             },
             Vec2::new(
-                line_start.x - 2. * translation_nudge.x / SQRT_2,
-                line_start.y + 2. * translation_nudge.x / SQRT_2,
+                line_start.x - 2. * nudge.x / SQRT_2,
+                line_start.y + 2. * nudge.x / SQRT_2,
             ),
         ),
         CompassOctant::East => (
@@ -156,13 +161,13 @@ pub(crate) fn calculate_arc(
             DrawArcData {
                 isometry: Isometry2d {
                     rotation: Rot2::PI,
-                    translation: Vec2::new(line_start.x, line_start.y + translation_nudge.y),
+                    translation: Vec2::new(line_start.x, line_start.y + nudge.y),
                 },
                 arc_angle: PI,
                 radius: radius.y,
                 color,
             },
-            Vec2::new(line_start.x, line_start.y + 2. * translation_nudge.y),
+            Vec2::new(line_start.x, line_start.y + 2. * nudge.y),
         ),
         CompassOctant::SouthEast => (
             draw_line_data,
@@ -170,8 +175,8 @@ pub(crate) fn calculate_arc(
                 isometry: Isometry2d {
                     rotation: Rot2::radians(FRAC_PI_2 + FRAC_PI_4),
                     translation: Vec2::new(
-                        line_start.x + translation_nudge.y / SQRT_2,
-                        line_start.y + translation_nudge.y / SQRT_2,
+                        line_start.x + nudge.y / SQRT_2,
+                        line_start.y + nudge.y / SQRT_2,
                     ),
                 },
                 arc_angle: PI,
@@ -179,8 +184,8 @@ pub(crate) fn calculate_arc(
                 color,
             },
             Vec2::new(
-                line_start.x + 2. * translation_nudge.y / SQRT_2,
-                line_start.y + 2. * translation_nudge.y / SQRT_2,
+                line_start.x + 2. * nudge.y / SQRT_2,
+                line_start.y + 2. * nudge.y / SQRT_2,
             ),
         ),
         CompassOctant::South => (
@@ -188,13 +193,13 @@ pub(crate) fn calculate_arc(
             DrawArcData {
                 isometry: Isometry2d {
                     rotation: Rot2::FRAC_PI_2,
-                    translation: Vec2::new(line_start.x + translation_nudge.x, line_start.y),
+                    translation: Vec2::new(line_start.x + nudge.x, line_start.y),
                 },
                 arc_angle: PI,
                 radius: radius.x,
                 color,
             },
-            Vec2::new(line_start.x + 2. * translation_nudge.x, line_start.y),
+            Vec2::new(line_start.x + 2. * nudge.x, line_start.y),
         ),
         CompassOctant::SouthWest => (
             draw_line_data,
@@ -202,8 +207,8 @@ pub(crate) fn calculate_arc(
                 isometry: Isometry2d {
                     rotation: Rot2::FRAC_PI_4,
                     translation: Vec2::new(
-                        line_start.x + translation_nudge.x / SQRT_2,
-                        line_start.y - translation_nudge.x / SQRT_2,
+                        line_start.x + nudge.x / SQRT_2,
+                        line_start.y - nudge.x / SQRT_2,
                     ),
                 },
                 arc_angle: PI,
@@ -211,8 +216,8 @@ pub(crate) fn calculate_arc(
                 color,
             },
             Vec2::new(
-                line_start.x + 2. * translation_nudge.x / SQRT_2,
-                line_start.y - 2. * translation_nudge.x / SQRT_2,
+                line_start.x + 2. * nudge.x / SQRT_2,
+                line_start.y - 2. * nudge.x / SQRT_2,
             ),
         ),
         CompassOctant::West => (
@@ -220,13 +225,13 @@ pub(crate) fn calculate_arc(
             DrawArcData {
                 isometry: Isometry2d {
                     rotation: Rot2::IDENTITY,
-                    translation: Vec2::new(line_start.x, line_start.y - translation_nudge.y),
+                    translation: Vec2::new(line_start.x, line_start.y - nudge.y),
                 },
                 arc_angle: PI,
                 radius: radius.y,
                 color,
             },
-            Vec2::new(line_start.x, line_start.y - 2. * translation_nudge.y),
+            Vec2::new(line_start.x, line_start.y - 2. * nudge.y),
         ),
         CompassOctant::NorthWest => (
             draw_line_data,
@@ -234,8 +239,8 @@ pub(crate) fn calculate_arc(
                 isometry: Isometry2d {
                     rotation: Rot2::radians(-FRAC_PI_4),
                     translation: Vec2::new(
-                        line_start.x - translation_nudge.y / SQRT_2,
-                        line_start.y - translation_nudge.y / SQRT_2,
+                        line_start.x - nudge.y / SQRT_2,
+                        line_start.y - nudge.y / SQRT_2,
                     ),
                 },
                 arc_angle: PI,
@@ -243,8 +248,8 @@ pub(crate) fn calculate_arc(
                 color,
             },
             Vec2::new(
-                line_start.x - 2. * translation_nudge.y / SQRT_2,
-                line_start.y - 2. * translation_nudge.y / SQRT_2,
+                line_start.x - 2. * nudge.y / SQRT_2,
+                line_start.y - 2. * nudge.y / SQRT_2,
             ),
         ),
     }
