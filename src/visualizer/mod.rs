@@ -258,7 +258,11 @@ fn get_nav_viz_draw_data(
     config: &AutoNavVizGizmoConfigGroup,
 ) -> (NavVizDrawMetaData, NavVizDrawData) {
     let mut start = get_point_in_direction(from_pos, from_size, dir);
-    let (mut end, mut end_dir) = get_closest_point(to_pos, to_size, start);
+    // TODO this logic needs to be refined
+    // It is flawed when the button rotates around
+    // You should get the closest point that is still in the direction of dir.
+    // Only when all the points are not in the direction of dir can you return the closest point
+    let (mut end, mut end_dir) = get_closest_point_in_dir(to_pos, to_size, start, dir);
     let arrow_must_reverse = !dir.is_in_direction(start, end);
     if arrow_must_reverse {
         // The arrow will wrap around the target entity and point to its opposite side.
@@ -461,14 +465,22 @@ pub(crate) fn get_nudge(
     (start_nudge, end_nudge)
 }
 
-/// Returns the point and direction of the point on the rectangle
+/// Returns a point and direction of the point on the rectangle
 /// defined by its center `pos` and `size`. This point is closest in distance
 /// squared to `point` compared to the other points in the seven other [`CompassOctant`]
-/// directions.
-fn get_closest_point(pos: Vec2, size: Vec2, point: Vec2) -> (Vec2, CompassOctant) {
+/// directions. Ideally, it is also in the desired direction `dir` from `point`.
+///
+/// If there is no point that is also in the direction of dir, it returns the closest point.
+fn get_closest_point_in_dir(
+    pos: Vec2,
+    size: Vec2,
+    point: Vec2,
+    in_dir: CompassOctant,
+) -> (Vec2, CompassOctant) {
     let mut closest_dir = CompassOctant::North;
     let mut closest_point = get_point_in_direction(pos, size, closest_dir);
     let mut squared_dist = closest_point.distance_squared(point);
+    let mut closest_point_is_in_dir = in_dir.is_in_direction(point, closest_point);
     for dir in [
         CompassOctant::NorthEast,
         CompassOctant::East,
@@ -480,10 +492,17 @@ fn get_closest_point(pos: Vec2, size: Vec2, point: Vec2) -> (Vec2, CompassOctant
     ] {
         let candidate = get_point_in_direction(pos, size, dir);
         let candidate_dist = candidate.distance_squared(point);
-        if candidate_dist < squared_dist {
+        let candidate_is_in_dir = in_dir.is_in_direction(point, candidate);
+        // If all candidates are not in_dir, this will return the closest point that is not in_dir
+        // If there is one candidate in_dir, it should be returned even if it's not technically
+        // the closest.
+        if (candidate_dist < squared_dist && candidate_is_in_dir == closest_point_is_in_dir)
+            || (!closest_point_is_in_dir && candidate_is_in_dir)
+        {
             closest_dir = dir;
             closest_point = candidate;
             squared_dist = candidate_dist;
+            closest_point_is_in_dir = candidate_is_in_dir;
         }
     }
     (closest_point, closest_dir)
