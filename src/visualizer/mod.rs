@@ -1,4 +1,7 @@
-use bevy::ecs::entity::{EntityHashMap, EntityHashSet};
+use bevy::ecs::{
+    entity::{EntityHashMap, EntityHashSet},
+    system::SystemParam,
+};
 use bevy::input_focus::{InputFocus, directional_navigation::NavNeighbors};
 use bevy::math::CompassOctant;
 use bevy::platform::collections::{HashMap, HashSet};
@@ -110,10 +113,6 @@ pub enum DrawLineType {
     DoubleEndedArrow,
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "This function will not be called directly. Its args are injected."
-)]
 /// The system that draws the visualizations of the auto navigation
 /// system. It uses gizmos to draw arrows between entities.
 pub fn draw_nav_viz(
@@ -123,9 +122,7 @@ pub fn draw_nav_viz(
     mut gizmos: Gizmos<AutoNavVizGizmoConfigGroup>,
     mut processed_entities: Local<EntityHashSet>,
     mut entity_to_color: Local<EntityHashMap<Color>>,
-    mut processed_asym_straight_edges: Local<HashSet<NavVizDrawMetaData>>,
-    mut asym_straight_edge_map: Local<HashMap<NavVizDrawMetaData, [DrawLineData; 3]>>,
-    mut asym_straight_line_data: Local<Vec<DrawLineData>>,
+    mut asymm_straight_edge_merger: AsymmetricalStraightEdgeMerger,
 ) {
     let config = config_store.config::<AutoNavVizGizmoConfigGroup>().1;
     let entries_to_draw_nav = match config.draw_mode {
@@ -153,7 +150,7 @@ pub fn draw_nav_viz(
 
     processed_entities.clear();
     processed_entities.shrink_to(nav_viz_map.entity_viz_pos_data.len());
-    asym_straight_edge_map.clear();
+    asymm_straight_edge_merger.clear();
     for (entity, neighbors) in entries_to_draw_nav.into_iter() {
         let from_color = *entity_to_color
             .entry(*entity)
@@ -230,8 +227,8 @@ pub fn draw_nav_viz(
                 }
                 NavVizDrawData::Straight(line_data) => {
                     if !nav_edge_is_symmetrical {
-                        // Add to the asym_straight_edge_map for further checking before drawing.
-                        asym_straight_edge_map.insert(meta_data, line_data);
+                        // Add to asymm_straight_edge_merger for further processing before drawing.
+                        asymm_straight_edge_merger.add_straight_edge(meta_data, line_data);
                     } else {
                         for line_data in line_data {
                             draw_line(&mut gizmos, config, &line_data);
@@ -243,114 +240,10 @@ pub fn draw_nav_viz(
         processed_entities.insert(*entity);
     }
 
-    // Merge any asymmetrical straight edges that would be drawn overlapping and
-    // therefore will appear symmetric. This process is only necessary
-    // if the symmetric edge setting is not the overlap setting
-    asym_straight_line_data.clear();
-    asym_straight_line_data.shrink_to(asym_straight_edge_map.len() * 3);
-    if let AutoNavVizDrawMode::EnabledForAll(symm_edge_settings) = config.draw_mode
-        && !symm_edge_settings.is_overlap()
-    {
-        processed_asym_straight_edges.clear();
-        processed_asym_straight_edges.shrink_to(asym_straight_edge_map.len());
-        for (meta_data, &(mut edge)) in asym_straight_edge_map.into_iter() {
-            let opposite_meta_data = meta_data.opposite();
-            if !processed_asym_straight_edges.contains(meta_data)
-                && let Some(other_edge) = asym_straight_edge_map.get(&opposite_meta_data)
-            {
-                // edge and other_edge are not symmetric in the *navigation* system, but would be
-                // draw overlapping, and so "appear" symmetric to the eyes due to mirror symmetry.
-                // For example, if between entities A <-> B, there is a NE Nav Edge from A -> B
-                // and a NW Nav Edge from B -> A, there will be an edge *drawn* symmetrically
-                // between A's NE point and B's NW point, but this is *not* considered a
-                // "symmetric navigation edge".
-                // In this case, we want to merge the appearance of such "appearing symmetric"
-                // edges in accordance with the Symmetrical Edge Settings
-                if let SymmetricalEdgeSettings::MergeAndMix(factor) = symm_edge_settings {
-                    edge[0].line_type = DrawLineType::Arrow;
-                    edge[1].line_type = DrawLineType::Line(None);
-                    edge[2].line_type = DrawLineType::Arrow;
-                    // override the color of the whole edge with the mixed color.
-                    let mixed_color = edge[0].color.mix(&other_edge[0].color, factor);
-
-                    for mut line_data in edge {
-                        line_data.color = mixed_color;
-                        asym_straight_line_data.push(line_data);
-                    }
-                    processed_asym_straight_edges.insert(opposite_meta_data);
-                } else if let SymmetricalEdgeSettings::MergeAndGradient = symm_edge_settings {
-                    edge[0].line_type = DrawLineType::Arrow;
-                    edge[2].line_type = DrawLineType::Arrow;
-                    // ensure there is a gradient in the middle line to the destination color.
-                    edge[1].color = edge[0].color;
-                    edge[1].line_type = DrawLineType::Line(Some(other_edge[0].color));
-                    // the arrow to the destination should get its color from the destination entity.
-                    edge[2].color = other_edge[0].color;
-
-                    for line_data in edge {
-                        asym_straight_line_data.push(line_data);
-                    }
-                    processed_asym_straight_edges.insert(opposite_meta_data);
-                } else {
-                    // SpacingBetweenTwoArrows
-                    // Must apply nudging to visibly see two arrows.
-                    let from_size = nav_viz_map
-                        .entity_viz_pos_data
-                        .get(&meta_data.source_entity)
-                        .expect("This succeeded when first making these edges")
-                        .size;
-                    let to_size = nav_viz_map
-                        .entity_viz_pos_data
-                        .get(&meta_data.destination_entity)
-                        .expect("This succeeded when first making these edges")
-                        .size;
-                    // The "start" of the edge of the first draw_line_data since it is drawn towards the source entity.
-                    let mut start_edge = edge[0].end;
-                    let mut end_edge = edge[2].end;
-                    maybe_apply_nudge(
-                        (&mut start_edge, from_size, meta_data.source_direction),
-                        (&mut end_edge, to_size, meta_data.destination_direction),
-                        symm_edge_settings,
-                    );
-                    edge[0].end = start_edge;
-                    edge[2].end = end_edge;
-
-                    // Also apply the same exact nudge to the other points
-                    let mut start_line = edge[1].start;
-                    let mut end_line = edge[1].end;
-                    maybe_apply_nudge(
-                        (&mut start_line, from_size, meta_data.source_direction),
-                        (&mut end_line, to_size, meta_data.destination_direction),
-                        symm_edge_settings,
-                    );
-                    edge[0].start = start_line;
-                    edge[1].start = start_line;
-                    edge[1].end = end_line;
-                    edge[2].start = end_line;
-
-                    for line_data in edge {
-                        asym_straight_line_data.push(line_data);
-                    }
-                    // The opposite edge will be processed similarly later
-                }
-            } else if !processed_asym_straight_edges.contains(meta_data) {
-                // Draw the asymmetrical edge as normal.
-                for line_data in edge {
-                    asym_straight_line_data.push(line_data);
-                }
-            }
-            processed_asym_straight_edges.insert(*meta_data);
-        }
-    } else {
-        for line_data in asym_straight_edge_map
-            .into_iter()
-            .flat_map(|(_, &edge)| edge)
-        {
-            asym_straight_line_data.push(line_data);
-        }
-    }
-
-    for line_data in asym_straight_line_data.iter() {
+    // Ensure any asymmetrical straight edges that might "appear"
+    // symmetrical when drawn are also merged.
+    asymm_straight_edge_merger.do_merge(&nav_viz_map, &config);
+    for line_data in asymm_straight_edge_merger.get_line_data().iter() {
         draw_line(&mut gizmos, config, line_data);
     }
 }
@@ -366,14 +259,14 @@ fn get_nav_viz_draw_data(
     is_symmetrical: bool,
     config: &AutoNavVizGizmoConfigGroup,
 ) -> (NavVizDrawMetaData, NavVizDrawData) {
-    let mut start = get_position_in_direction(from_pos, from_size, dir);
+    let mut start = get_point_in_direction(from_pos, from_size, dir);
     let (mut end, mut end_dir) = get_closest_point(to_pos, to_size, start);
     let arrow_must_reverse = !dir.is_in_direction(start, end);
     if arrow_must_reverse {
         // The arrow will wrap around the target entity and point to its opposite side.
         // This looks better and conveys the "looping" nature of this navigation path.
         end_dir = end_dir.opposite();
-        end = get_position_in_direction(to_pos, to_size, end_dir);
+        end = get_point_in_direction(to_pos, to_size, end_dir);
     }
 
     let mut line_type = DrawLineType::Arrow;
@@ -437,9 +330,8 @@ fn get_nav_viz_draw_data(
     } else {
         // The direction is multiplied by arrow_tip_length because the arrow tip
         // looks most natural when tip length is proportional to the arrow's length itself.
-        let source_arrow_start =
-            Into::<Dir2>::into(dir).as_vec2() * config.arrow_tip_length + start;
-        let source_arrow_type = if line_type == DrawLineType::DoubleEndedArrow {
+        let source_line_start = Into::<Dir2>::into(dir).as_vec2() * config.arrow_tip_length + start;
+        let source_line_type = if line_type == DrawLineType::DoubleEndedArrow {
             DrawLineType::Arrow
         } else {
             DrawLineType::Line(None)
@@ -455,13 +347,13 @@ fn get_nav_viz_draw_data(
             meta_data,
             NavVizDrawData::Straight([
                 DrawLineData {
-                    start: source_arrow_start,
+                    start: source_line_start,
                     end: start,
                     color: override_color.unwrap_or(start_color),
-                    line_type: source_arrow_type,
+                    line_type: source_line_type,
                 },
                 DrawLineData {
-                    start: source_arrow_start,
+                    start: source_line_start,
                     end: destination_arrow_start,
                     color: override_color.unwrap_or(start_color),
                     line_type: DrawLineType::Line(gradient_color),
@@ -474,6 +366,177 @@ fn get_nav_viz_draw_data(
                 },
             ]),
         )
+    }
+}
+
+/// A System Param that merges asymmetrical straight edges within the [`draw_nav_viz`] system.
+///
+/// This system param takes advantage of private [`Local`] variables, so it must be cleared before every use.
+///
+/// For more information on why this process is necessary, refer to
+/// [`AsymmetricalStraightEdgeMerger::do_merge`].
+#[derive(SystemParam)]
+pub struct AsymmetricalStraightEdgeMerger<'s> {
+    processed_asym_straight_edges: Local<'s, HashSet<NavVizDrawMetaData>>,
+    asym_straight_edge_map: Local<'s, HashMap<NavVizDrawMetaData, [DrawLineData; 3]>>,
+    asym_straight_line_data: Local<'s, Vec<DrawLineData>>,
+}
+
+impl<'s> AsymmetricalStraightEdgeMerger<'s> {
+    /// Clears [`Local`] fields so that this param may be re-used.
+    ///
+    /// Invoke this function before starting to prep visualization data for drawing.
+    /// Afterwards, asymmetrical straight edge can be queued for processing via
+    /// [`add_straight_edge`](Self::add_straight_edge)
+    pub fn clear(&mut self) {
+        self.processed_asym_straight_edges.clear();
+        self.asym_straight_edge_map.clear();
+        self.asym_straight_line_data.clear();
+    }
+
+    /// Adds an asymmetrical straight edge for processing via [`do_merge`](Self::do_merge)
+    pub fn add_straight_edge(
+        &mut self,
+        meta_data: NavVizDrawMetaData,
+        straight_edge_line_data: [DrawLineData; 3],
+    ) {
+        self.asym_straight_edge_map
+            .insert(meta_data, straight_edge_line_data);
+    }
+
+    /// Merges any asymmetrical straight edges that would be drawn overlapping and
+    /// therefore would appear symmetric to the user, even if it may not be considered
+    /// "symmetric" navigation wise.
+    ///
+    /// This should only be called after first running [clear](Self::clear)'ed and
+    /// then adding all the asymmetrical straight edges that need to be processed via
+    /// [`add_straight_edge`](Self::add_straight_edge).
+    ///
+    /// An example: If, between entities A <-> B, there is a NE Nav Edge from A -> B
+    /// and a NW Nav Edge from B -> A, then there will be two asymmetrical edges
+    /// queued to be drawn between A's NE point and B's NW point.
+    /// This is *not* defined as a "symmetric navigation edge", which is a navigation
+    /// edge between two opposite directions i.e. NE <-> SW or SE <-> NW.
+    /// When the NE and NW nav edges are drawn, however, they would overlap and "appear"
+    /// to be a symmetric edge visually. This function merges such edges.
+    pub fn do_merge(&mut self, nav_viz_map: &NavVizMap, config: &AutoNavVizGizmoConfigGroup) {
+        self.asym_straight_line_data
+            .shrink_to(self.asym_straight_edge_map.len() * 3);
+        // The merging process is only necessary if the symmetric edge setting is not the overlap setting.
+        if let AutoNavVizDrawMode::EnabledForAll(symm_edge_settings) = config.draw_mode
+            && !symm_edge_settings.is_overlap()
+        {
+            self.processed_asym_straight_edges.clear();
+            self.processed_asym_straight_edges
+                .shrink_to(self.asym_straight_edge_map.len());
+            for (meta_data, &(mut edge)) in self.asym_straight_edge_map.into_iter() {
+                let opposite_meta_data = meta_data.opposite();
+                if !self.processed_asym_straight_edges.contains(meta_data)
+                    && let Some(other_edge) = self.asym_straight_edge_map.get(&opposite_meta_data)
+                {
+                    // edge and other_edge are not symmetric in the *navigation* system, but would be
+                    // draw overlapping, and so "appear" symmetric to the eyes due to mirror symmetry.
+                    // For example, if between entities A <-> B, there is a NE Nav Edge from A -> B
+                    // and a NW Nav Edge from B -> A, there will be an edge *drawn* symmetrically
+                    // between A's NE point and B's NW point, but this is *not* considered a
+                    // "symmetric navigation edge".
+                    // In this case, we want to merge the appearance of such "appearing symmetric"
+                    // edges in accordance with the Symmetrical Edge Settings
+                    if let SymmetricalEdgeSettings::MergeAndMix(factor) = symm_edge_settings {
+                        edge[0].line_type = DrawLineType::Arrow;
+                        edge[1].line_type = DrawLineType::Line(None);
+                        edge[2].line_type = DrawLineType::Arrow;
+                        // override the color of the whole edge with the mixed color.
+                        let mixed_color = edge[0].color.mix(&other_edge[0].color, factor);
+
+                        for mut line_data in edge {
+                            line_data.color = mixed_color;
+                            self.asym_straight_line_data.push(line_data);
+                        }
+                        self.processed_asym_straight_edges
+                            .insert(opposite_meta_data);
+                    } else if let SymmetricalEdgeSettings::MergeAndGradient = symm_edge_settings {
+                        edge[0].line_type = DrawLineType::Arrow;
+                        edge[2].line_type = DrawLineType::Arrow;
+                        // ensure there is a gradient in the middle line to the destination color.
+                        edge[1].color = edge[0].color;
+                        edge[1].line_type = DrawLineType::Line(Some(other_edge[0].color));
+                        // the arrow to the destination should get its color from the destination entity.
+                        edge[2].color = other_edge[0].color;
+
+                        for line_data in edge {
+                            self.asym_straight_line_data.push(line_data);
+                        }
+                        self.processed_asym_straight_edges
+                            .insert(opposite_meta_data);
+                    } else {
+                        // SpacingBetweenTwoArrows
+                        // Must apply nudging to visibly see two arrows.
+                        let from_size = nav_viz_map
+                            .entity_viz_pos_data
+                            .get(&meta_data.source_entity)
+                            .expect("This succeeded when first making these edges")
+                            .size;
+                        let to_size = nav_viz_map
+                            .entity_viz_pos_data
+                            .get(&meta_data.destination_entity)
+                            .expect("This succeeded when first making these edges")
+                            .size;
+                        // The "start" of the edge of the first draw_line_data since it is drawn towards the source entity.
+                        let mut start_edge = edge[0].end;
+                        let mut end_edge = edge[2].end;
+                        maybe_apply_nudge(
+                            (&mut start_edge, from_size, meta_data.source_direction),
+                            (&mut end_edge, to_size, meta_data.destination_direction),
+                            symm_edge_settings,
+                        );
+                        edge[0].end = start_edge;
+                        edge[2].end = end_edge;
+
+                        // Also apply the same exact nudge to the other points
+                        let mut start_line = edge[1].start;
+                        let mut end_line = edge[1].end;
+                        maybe_apply_nudge(
+                            (&mut start_line, from_size, meta_data.source_direction),
+                            (&mut end_line, to_size, meta_data.destination_direction),
+                            symm_edge_settings,
+                        );
+                        edge[0].start = start_line;
+                        edge[1].start = start_line;
+                        edge[1].end = end_line;
+                        edge[2].start = end_line;
+
+                        for line_data in edge {
+                            self.asym_straight_line_data.push(line_data);
+                        }
+                        // The opposite edge will be processed similarly later
+                    }
+                } else if !self.processed_asym_straight_edges.contains(meta_data) {
+                    // Draw the asymmetrical edge as normal.
+                    for line_data in edge {
+                        self.asym_straight_line_data.push(line_data);
+                    }
+                }
+                self.processed_asym_straight_edges.insert(*meta_data);
+            }
+        } else {
+            // If we don't have to merge, just return all the edge data.
+            for line_data in self
+                .asym_straight_edge_map
+                .into_iter()
+                .flat_map(|(_, &edge)| edge)
+            {
+                self.asym_straight_line_data.push(line_data);
+            }
+        }
+    }
+
+    /// Returns drawable line data from merged asymmetrical straight edges
+    /// to be drawn by [`Gizmos`].
+    ///
+    /// This should only be called after [`do_merge`](Self::do_merge) have been called.
+    fn get_line_data(&self) -> &Vec<DrawLineData> {
+        return &self.asym_straight_line_data;
     }
 }
 
@@ -573,7 +636,7 @@ fn maybe_apply_nudge(
 /// directions.
 fn get_closest_point(pos: Vec2, size: Vec2, point: Vec2) -> (Vec2, CompassOctant) {
     let mut closest_dir = CompassOctant::North;
-    let mut closest_point = get_position_in_direction(pos, size, closest_dir);
+    let mut closest_point = get_point_in_direction(pos, size, closest_dir);
     let mut squared_dist = closest_point.distance_squared(point);
     for dir in [
         CompassOctant::NorthEast,
@@ -584,7 +647,7 @@ fn get_closest_point(pos: Vec2, size: Vec2, point: Vec2) -> (Vec2, CompassOctant
         CompassOctant::West,
         CompassOctant::NorthWest,
     ] {
-        let candidate = get_position_in_direction(pos, size, dir);
+        let candidate = get_point_in_direction(pos, size, dir);
         let candidate_dist = candidate.distance_squared(point);
         if candidate_dist < squared_dist {
             closest_dir = dir;
@@ -596,7 +659,7 @@ fn get_closest_point(pos: Vec2, size: Vec2, point: Vec2) -> (Vec2, CompassOctant
 }
 
 /// Returns the point on the rectangle defined by its center `pos` and `size` that is in the direction of `dir`.
-fn get_position_in_direction(pos: Vec2, size: Vec2, dir: CompassOctant) -> Vec2 {
+fn get_point_in_direction(pos: Vec2, size: Vec2, dir: CompassOctant) -> Vec2 {
     match dir {
         CompassOctant::North => pos + Vec2::new(0., size.y / 2.),
         CompassOctant::NorthEast => pos + (size / 2.),
