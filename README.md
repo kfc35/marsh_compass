@@ -54,8 +54,7 @@ unusual placements of buttons.
 
 ## Limitations
 This crate has some limitations (accurate as of March 2026)
-- It does not nicely visualize navigation between UI nodes that overlap.
-- Arrows do not touch closely to rotated UI nodes.
+- It does not nicely/clearly visualize navigation between UI nodes that overlap.
 - Only entities that are in the same render target as the current focus have
 navigation edges visualized.
 - Probably others not yet reported!

@@ -6,10 +6,6 @@
 //! This example shows what the visualization can look with certain placements of buttons.
 //! This also shows the behavior of the auto navigation system itself, i.e.
 //! when and where it draws an edge from one button to the other.
-//!
-//! NOTE: The visualization currently uses rotated axis aligned bounds, which can appear as
-//! empty padding between navigation arrows and a rotated entity. There
-//! is an issue to address this.
 use std::f32::consts::PI;
 
 use bevy::input::keyboard::Key;
