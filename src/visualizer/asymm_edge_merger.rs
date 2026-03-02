@@ -160,6 +160,6 @@ impl<'s> AsymmetricalStraightEdgeMerger<'s> {
     ///
     /// This should only be called after [`do_merge`](Self::do_merge) have been called.
     pub fn get_line_data(&self) -> &Vec<DrawLineData> {
-        return &self.line_data_to_draw;
+        &self.line_data_to_draw
     }
 }

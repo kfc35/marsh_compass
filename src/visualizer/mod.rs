@@ -240,7 +240,7 @@ pub fn draw_nav_viz(
 
     // Ensure any asymmetrical straight edges that might "appear"
     // symmetrical when drawn are also merged.
-    asymm_straight_edge_merger.do_merge(&nav_viz_map, &config);
+    asymm_straight_edge_merger.do_merge(&nav_viz_map, config);
     for line_data in asymm_straight_edge_merger.get_line_data().iter() {
         draw_line(&mut gizmos, config, line_data);
     }
