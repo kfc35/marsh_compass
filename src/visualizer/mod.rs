@@ -276,11 +276,10 @@ fn get_nav_viz_draw_data(
     if is_symmetrical
         && let AutoNavVizDrawMode::EnabledForAll(symm_edge_settings) = config.draw_mode
     {
-        maybe_apply_nudge(
-            (&mut start, from_size, dir),
-            (&mut end, to_size, end_dir),
-            symm_edge_settings,
-        );
+        let (start_nudge, end_nudge) =
+            get_nudge(from_size, dir, to_size, end_dir, symm_edge_settings);
+        start += start_nudge;
+        end += end_nudge;
         if symm_edge_settings.is_merge() {
             // Update the `end_color` to what the opposite arrow would have been colored.
             end_color = config.get_color_for_direction(to_color, from_color, end_dir);
@@ -367,94 +366,99 @@ fn get_nav_viz_draw_data(
     }
 }
 
-/// Apply a nudge to the `start` and `end` of the drawn edge
+/// Returns a nudge to be applied to the `start` and `end` of the drawn edge
 /// if `symm_edge_settings` is [`SymmetricalEdgeSettings::SpacingBetweenSingleArrows`].
 ///
-/// The nudge applied is proportional to the sizes of the entities.
-/// Nudge is applied counter-clockwise for the source entity and clockwise
+/// The returned nudge is proportional to the sizes of the entities.
+/// Nudge is calculated counter-clockwise for the source entity and clockwise
 /// for the destination entity.
-pub(crate) fn maybe_apply_nudge(
-    (start, from_size, start_dir): (&mut Vec2, Vec2, CompassOctant),
-    (end, to_size, end_dir): (&mut Vec2, Vec2, CompassOctant),
+pub(crate) fn get_nudge(
+    from_size: Vec2,
+    start_dir: CompassOctant,
+    to_size: Vec2,
+    end_dir: CompassOctant,
     symm_edge_settings: SymmetricalEdgeSettings,
-) {
-    let start_nudge = match symm_edge_settings {
+) -> (Vec2, Vec2) {
+    let start_nudge_units = match symm_edge_settings {
         SymmetricalEdgeSettings::SpacingBetweenSingleArrows => from_size / 16.,
         _ => Vec2::ZERO,
     };
-    let end_nudge = match symm_edge_settings {
+    let end_nudge_units = match symm_edge_settings {
         SymmetricalEdgeSettings::SpacingBetweenSingleArrows => to_size / 16.,
         _ => Vec2::ZERO,
     };
+    let mut start_nudge = Vec2::ZERO;
+    let mut end_nudge = Vec2::ZERO;
     match start_dir {
         CompassOctant::North => {
             // Nudge West
-            *start -= Vec2::new(start_nudge.x, 0.);
+            start_nudge -= Vec2::new(start_nudge_units.x, 0.);
         }
         CompassOctant::NorthEast => {
             // Nudge West
-            *start -= Vec2::new(start_nudge.x, 0.);
+            start_nudge -= Vec2::new(start_nudge_units.x, 0.);
         }
         CompassOctant::East => {
             // Nudge North
-            *start += Vec2::new(0., start_nudge.y);
+            start_nudge += Vec2::new(0., start_nudge_units.y);
         }
         CompassOctant::SouthEast => {
             // Nudge North
-            *start += Vec2::new(0., start_nudge.y);
+            start_nudge += Vec2::new(0., start_nudge_units.y);
         }
         CompassOctant::South => {
             // Nudge East
-            *start += Vec2::new(start_nudge.x, 0.);
+            start_nudge += Vec2::new(start_nudge_units.x, 0.);
         }
         CompassOctant::SouthWest => {
             // Nudge East
-            *start += Vec2::new(start_nudge.x, 0.);
+            start_nudge += Vec2::new(start_nudge_units.x, 0.);
         }
         CompassOctant::West => {
             // Nudge South
-            *start -= Vec2::new(0., start_nudge.y);
+            start_nudge -= Vec2::new(0., start_nudge_units.y);
         }
         CompassOctant::NorthWest => {
             // Nudge South
-            *start -= Vec2::new(0., start_nudge.y);
+            start_nudge -= Vec2::new(0., start_nudge_units.y);
         }
     }
 
     match end_dir {
         CompassOctant::North => {
             // Nudge East
-            *end += Vec2::new(end_nudge.x, 0.);
+            end_nudge += Vec2::new(end_nudge_units.x, 0.);
         }
         CompassOctant::NorthEast => {
             // Nudge South
-            *end -= Vec2::new(0., end_nudge.y);
+            end_nudge -= Vec2::new(0., end_nudge_units.y);
         }
         CompassOctant::East => {
             // Nudge South
-            *end -= Vec2::new(0., end_nudge.y);
+            end_nudge -= Vec2::new(0., end_nudge_units.y);
         }
         CompassOctant::SouthEast => {
             // Nudge West
-            *end -= Vec2::new(end_nudge.x, 0.);
+            end_nudge -= Vec2::new(end_nudge_units.x, 0.);
         }
         CompassOctant::South => {
             // Nudge West
-            *end -= Vec2::new(end_nudge.x, 0.);
+            end_nudge -= Vec2::new(end_nudge_units.x, 0.);
         }
         CompassOctant::SouthWest => {
             // Nudge North
-            *end += Vec2::new(0., end_nudge.y);
+            end_nudge += Vec2::new(0., end_nudge_units.y);
         }
         CompassOctant::West => {
             // Nudge North
-            *end += Vec2::new(0., end_nudge.y);
+            end_nudge += Vec2::new(0., end_nudge_units.y);
         }
         CompassOctant::NorthWest => {
             // Nudge East
-            *end += Vec2::new(end_nudge.x, 0.);
+            end_nudge += Vec2::new(end_nudge_units.x, 0.);
         }
     }
+    (start_nudge, end_nudge)
 }
 
 /// Returns the point and direction of the point on the rectangle

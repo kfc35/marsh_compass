@@ -7,7 +7,7 @@ use crate::{
     NavVizMap, SymmetricalEdgeSettings,
 };
 
-/// A System Param that merges asymmetrical straight edges within the [`draw_nav_viz`] system.
+/// A System Param that merges asymmetrical straight edges within the [`draw_nav_viz`](crate::draw_nav_viz) system.
 ///
 /// This system param takes advantage of private [`Local`] variables, so it must be cleared before every use.
 ///
@@ -114,29 +114,21 @@ impl<'s> AsymmetricalStraightEdgeMerger<'s> {
                             .get(&meta_data.destination_entity)
                             .expect("This succeeded when first making these edges")
                             .size;
-                        // The "start" of the edge of the first draw_line_data since it is drawn towards the source entity.
-                        let mut start_edge = edge[0].end;
-                        let mut end_edge = edge[2].end;
-                        crate::maybe_apply_nudge(
-                            (&mut start_edge, from_size, meta_data.source_direction),
-                            (&mut end_edge, to_size, meta_data.destination_direction),
-                            symm_edge_settings,
-                        );
-                        edge[0].end = start_edge;
-                        edge[2].end = end_edge;
 
-                        // Also apply the same exact nudge to the other points
-                        let mut start_line = edge[1].start;
-                        let mut end_line = edge[1].end;
-                        crate::maybe_apply_nudge(
-                            (&mut start_line, from_size, meta_data.source_direction),
-                            (&mut end_line, to_size, meta_data.destination_direction),
+                        let (start_nudge, end_nudge) = crate::get_nudge(
+                            from_size,
+                            meta_data.source_direction,
+                            to_size,
+                            meta_data.destination_direction,
                             symm_edge_settings,
                         );
-                        edge[0].start = start_line;
-                        edge[1].start = start_line;
-                        edge[1].end = end_line;
-                        edge[2].start = end_line;
+
+                        edge[0].start += start_nudge;
+                        edge[0].end += start_nudge;
+                        edge[1].start += start_nudge;
+                        edge[1].end += end_nudge;
+                        edge[2].start += end_nudge;
+                        edge[2].end += end_nudge;
 
                         for line_data in edge {
                             self.line_data_to_draw.push(line_data);
