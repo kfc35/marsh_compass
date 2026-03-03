@@ -9,9 +9,6 @@ repository = "https://github.com/kfc35/bevy_auto_nav_viz"
 readme = "README.md"
 keywords = ["gamedev", "bevy"]
 categories = ["game-development"]
-exclude = [
-    "assets/*",
-]
 
 [dependencies]
 bevy = { version = "0.18.0", default-features = false, features = [ 
