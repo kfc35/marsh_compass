@@ -6,9 +6,16 @@
 //! This example shows what the visualization can look with certain placements of buttons.
 //! This also shows the behavior of the auto navigation system itself, i.e.
 //! when and where it draws an edge from one button to the other.
+//!
+//! This example starts off using the default
+//! [`AutoNavigationConfig`](bevy::input_focus::directional_navigation::AutoNavigationConfig).
+//! Changing the navigation config will result in different navigation behavior
+//! (and thus will change the visualization).
 use std::f32::consts::PI;
 
+use bevy::ecs::system::SystemParam;
 use bevy::input::keyboard::Key;
+use bevy::input_focus::directional_navigation::AutoNavigationConfig;
 use bevy::input_focus::{
     InputDispatchPlugin, InputFocus, InputFocusVisible,
     directional_navigation::DirectionalNavigationMap,
@@ -62,7 +69,7 @@ impl Default for OrderedButtons {
 #[derive(Component)]
 struct MovingButton;
 
-/// A resource that denotes whether the [`MovingButton`] can move.
+/// A resource that denotes whether the [`MovingButton`] can move via translation.
 #[derive(Resource)]
 struct TranslationToggle(bool);
 
@@ -71,8 +78,6 @@ impl Default for TranslationToggle {
         Self(true)
     }
 }
-
-// TODO action that adds a symmetric looping edge.
 
 fn setup(
     mut commands: Commands,
@@ -102,11 +107,32 @@ fn setup(
                 "Press `1` to toggle translation.\n\n\
                 Press `2` to toggle rotation.\n\n\
                 Press `3` to toggle manual looping edge E <-> W.\n\n\
+                Press `4` to cycle through min alignment factors.\n\n\
                 Use the D-Pad or Arrow Keys to navigate."
             ),],
         ))
         .id();
     commands.entity(root_id).add_child(rules_container);
+
+    let settings_container = commands
+        .spawn((
+            Node {
+                display: Display::Block,
+                top: px(20),
+                margin: UiRect {
+                    left: px(20),
+                    ..default()
+                },
+                ..default()
+            },
+            children![(
+                Node { ..default() },
+                MinAlignmentFactorText,
+                Text::new("Min Alignment Factor: 0.\n\n")
+            ),],
+        ))
+        .id();
+    commands.entity(root_id).add_child(settings_container);
 
     let window_logical_size = window.resolution.size();
 
@@ -204,6 +230,8 @@ fn process_toggles(
     mut virtual_time: ResMut<Time<Virtual>>,
     buttons: Res<OrderedButtons>,
     mut override_map: ResMut<DirectionalNavigationMap>,
+    mut config: ResMut<AutoNavigationConfig>,
+    mut get_text: GetTextParam,
 ) -> Result {
     if keyboard.just_pressed(Key::Character("1".into())) {
         translation_toggle.0 ^= true;
@@ -215,7 +243,6 @@ fn process_toggles(
             virtual_time.pause()
         }
     }
-
     if keyboard.just_pressed(Key::Character("3".into())) {
         if override_map.neighbors.is_empty() {
             override_map.add_looping_edges(&[buttons[0], buttons[1]], CompassOctant::East);
@@ -223,8 +250,27 @@ fn process_toggles(
             override_map.clear();
         }
     }
+    if keyboard.just_pressed(Key::Character("4".into())) {
+        if config.min_alignment_factor == 1. {
+            config.min_alignment_factor = 0.;
+        } else {
+            config.min_alignment_factor += 0.25;
+        }
+        get_text.min_alignment_query.single_mut()?.0 =
+            format!("Min Alignment Factor: {}\n\n", config.min_alignment_factor);
+    }
 
     Ok(())
+}
+
+/// Marker component describing the state of looping edges
+#[derive(Component)]
+struct MinAlignmentFactorText;
+
+/// System param for easily getting text.
+#[derive(SystemParam)]
+struct GetTextParam<'w, 's> {
+    min_alignment_query: Query<'w, 's, &'static mut Text, With<MinAlignmentFactorText>>,
 }
 
 // The input focus always has a white border.
