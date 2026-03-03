@@ -25,6 +25,11 @@
 //! }
 //! ```
 //!
+//! Once you have set the [`InputFocus`](bevy::input_focus::InputFocus) in the app
+//! to a UI entity, the [`AutoNavVizPlugin`] will draw the navigation edges that exist between
+//! all UI entities that have opted in to the
+//! [`AutoDirectionalNavigation`](bevy::ui::auto_directional_navigation::AutoDirectionalNavigation).
+//!
 //! # Configuration
 //! The plugin can be configured via its gizmo config group [`AutoNavVizGizmoConfigGroup`].
 //! ```
