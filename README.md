@@ -19,6 +19,10 @@ fn main() {
 }
 ```
 
+Once you have set the `InputFocus` in the app to a UI entity,
+the `AutoNavVizPlugin` will draw the navigation edges that exist between
+all UI entities that have opted in to `AutoDirectionalNavigation`.
+
 ## Configuration
 The plugin can be configured via its gizmo config group `AutoNavVizGizmoConfigGroup`.
 
@@ -44,7 +48,7 @@ An example showcasing what the visualization looks like with various
 placement of buttons through the use of a moving button.
 Use this to see what the visualization will look like (and, by extension,
 how the `AutoDirectionalNavigator` will behave) for more
-unusual placements of buttons.
+unusual / freeform placements of buttons.
 
 ## Version Table
 
