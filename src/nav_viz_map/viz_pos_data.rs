@@ -85,12 +85,12 @@ pub(crate) fn rebuild_entity_viz_pos_data(
     viz_pos_data.shrink_to(auto_nav_ui_focusable_areas.len());
 
     for focusable_area in auto_nav_ui_focusable_areas {
-        let Ok(world_center) = viewport_to_world_2d(focusable_area.position) else {
-            continue;
-        };
         let Some((rotation, obb_size)) =
             get_rotation_and_obb_size(focusable_area.entity, &position_data_query)
         else {
+            continue;
+        };
+        let Ok(world_center) = viewport_to_world_2d(focusable_area.position) else {
             continue;
         };
         let transformation = Isometry2d::new(world_center, rotation);
@@ -106,6 +106,8 @@ pub(crate) fn rebuild_entity_viz_pos_data(
     }
 }
 
+/// This is somewhat redundant with `entity_to_camera_and_focusable_area`
+/// possible todo: merge the two so we are not querying twice.
 fn get_rotation_and_obb_size(
     entity: Entity,
     position_data_query: &Query<(&ComputedNode, &UiGlobalTransform)>,
@@ -123,65 +125,65 @@ fn get_rotation_and_obb_size(
 
 #[cfg(test)]
 mod tests {
+    use std::f32::consts::FRAC_PI_2;
+
     use super::*;
 
-    use bevy::input_focus::directional_navigation::FocusableArea;
+    fn assert_eq_vec2(left: Vec2, right: Vec2) {
+        let difference = left - right;
+        assert!(difference.x.abs() <= 1e-6);
+        assert!(difference.y.abs() <= 1e-6);
+    }
 
     #[test]
-    fn test_rebuild_entity_viz_data() {
-        // let mut entity_viz_pos_data = EntityHashMap::new();
-        // let e1 = Entity::from_raw_u32(1).unwrap();
-        // let e2 = Entity::from_raw_u32(2).unwrap();
-        // let e3 = Entity::from_raw_u32(3).unwrap();
-        // // Old entries should be cleared / overwritten.
-        // entity_viz_pos_data.insert(
-        //     e1,
-        //     NavVizPosData {
-        //         world_position: Vec2::new(99., 234.),
-        //         size: Vec2::new(33., 28.),
-        //     },
-        // );
-        // let focusable_areas = vec![
-        //     FocusableArea {
-        //         entity: e1,
-        //         position: Vec2::new(50., 100.),
-        //         size: Vec2::new(25., 30.),
-        //     },
-        //     FocusableArea {
-        //         entity: e2,
-        //         position: Vec2::new(575., 1080.),
-        //         size: Vec2::new(2., 5.),
-        //     },
-        //     FocusableArea {
-        //         entity: e3,
-        //         position: Vec2::new(500., 1000.),
-        //         size: Vec2::new(1., 100.),
-        //     },
-        // ];
+    fn test_nav_viz_pos_data() {
+        let data = NavVizPosData {
+            aabb_size: Vec2::new(30., 20.),
+            transformation: Isometry2d::new(Vec2::new(3., 7.), Rot2::radians(FRAC_PI_2)),
+            obb_size: Vec2::new(20., 30.),
+        };
 
-        // let viewport_to_world_2d = |viewport_position: Vec2| {
-        //     if viewport_position.x > 500. {
-        //         Err(ViewportConversionError::InvalidData)
-        //     } else {
-        //         Ok(Vec2::new(
-        //             viewport_position.x - 500.,
-        //             1000. - viewport_position.y,
-        //         ))
-        //     }
-        // };
+        assert_eq_vec2(data.get_center(), Vec2::new(3., 7.));
+        assert_eq_vec2(
+            data.get_point_in_direction(CompassOctant::North),
+            Vec2::new(3., 17.),
+        );
+        assert_eq_vec2(
+            data.get_point_in_direction(CompassOctant::NorthEast),
+            Vec2::new(18., 17.),
+        );
+        assert_eq_vec2(
+            data.get_point_in_direction(CompassOctant::East),
+            Vec2::new(18., 7.),
+        );
+        assert_eq_vec2(
+            data.get_point_in_direction(CompassOctant::SouthEast),
+            Vec2::new(18., -3.),
+        );
+        assert_eq_vec2(
+            data.get_point_in_direction(CompassOctant::South),
+            Vec2::new(3., -3.),
+        );
+        assert_eq_vec2(
+            data.get_point_in_direction(CompassOctant::SouthWest),
+            Vec2::new(-12., -3.),
+        );
+        assert_eq_vec2(
+            data.get_point_in_direction(CompassOctant::West),
+            Vec2::new(-12., 7.),
+        );
+        assert_eq_vec2(
+            data.get_point_in_direction(CompassOctant::NorthWest),
+            Vec2::new(-12., 17.),
+        );
 
-        // rebuild_entity_viz_pos_data(
-        //     &mut entity_viz_pos_data,
-        //     &focusable_areas,
-        //     &viewport_to_world_2d,
-        // );
-
-        // assert_eq!(entity_viz_pos_data.len(), 2);
-        // let viz_data = entity_viz_pos_data.get(&e1).unwrap();
-        // assert_eq!(viz_data.world_position, Vec2::new(-450., 900.));
-        // assert_eq!(viz_data.size, Vec2::new(25., 30.));
-        // let viz_data = entity_viz_pos_data.get(&e3).unwrap();
-        // assert_eq!(viz_data.world_position, Vec2::new(0., 0.));
-        // assert_eq!(viz_data.size, Vec2::new(1., 100.));
+        assert_eq_vec2(
+            data.apply_local_translation(Vec2::new(18., 7.), Vec2::new(3., 0.)),
+            Vec2::new(18., 10.),
+        );
+        assert_eq_vec2(
+            data.apply_local_translation(Vec2::new(18., 7.), Vec2::new(0., 7.)),
+            Vec2::new(11., 7.),
+        );
     }
 }
