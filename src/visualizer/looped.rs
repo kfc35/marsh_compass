@@ -33,23 +33,39 @@ pub(crate) fn new_looped_draw_data(
         // The line should not be drawn with a gradient.
         DrawLineType::Line(None)
     };
+    let start_to_end_dir = (end_point - start_point).normalize();
+    // We work off the default assumption that the arrow will heading in exact
+    // opposite direction as the `start_point_dir`. This corresponds with
+    // a 180 degree rotation, aka pi-radians rotation.
+    // This dot product is how much we deviate from that assumption.
+    let mut radians_from_pi_arc = ops::acos(
+        Into::<Dir2>::into(start_point_dir.opposite())
+            .as_vec2()
+            .dot(start_to_end_dir),
+    );
+    // Since the dot product is always positive, we need to figure out
+    // Whether to add or subtract from the pi-radians rotation.
+    // For that, we use the cross product.
+    let orientation =
+        start_to_end_dir.perp_dot(Into::<Dir2>::into(start_point_dir.opposite()).as_vec2());
+    if orientation < 0. {
+        radians_from_pi_arc *= -1.;
+    }
     let (start_line, start_arc, line_start) = calculate_arc(
-        start_point,
-        from_pos_data,
-        start_point_dir,
+        (start_point, from_pos_data, start_point_dir),
         false,
         override_color.unwrap_or(from_color),
         start_line_line_type,
+        radians_from_pi_arc,
         config,
     );
     // The ending arc should always end in an arrow
     let (end_line, end_arc, line_end) = calculate_arc(
-        end_point,
-        to_pos_data,
-        end_point_dir,
+        (end_point, to_pos_data, end_point_dir),
         true,
         override_color.unwrap_or(to_color),
         DrawLineType::Arrow,
+        radians_from_pi_arc,
         config,
     );
     let gradient_color = if override_color.is_some() {
@@ -93,12 +109,11 @@ pub(crate) fn new_looped_draw_data(
 /// For ending arcs, the arc should be drawn mirrored (`mirror` set to true) for aesthetics.
 /// line_type should also be set to [`DrawLineType::Arrow`].
 pub(crate) fn calculate_arc(
-    point: Vec2,
-    pos_data: &NavVizPosData,
-    dir_of_point: CompassOctant,
+    (point, pos_data, dir_of_point): (Vec2, &NavVizPosData, CompassOctant),
     mirror: bool,
     color: Color,
     line_type: DrawLineType,
+    arc_angle_from_pi_radians: f32,
     config: &AutoNavVizGizmoConfigGroup,
 ) -> (DrawLineData, DrawArcData, Vec2) {
     // line_start is also the starting point of the arc.
@@ -122,20 +137,24 @@ pub(crate) fn calculate_arc(
     // The radius length is 1/2 the arc diameter. So, the radius must be
     // at most 1/12 the length of a side.
     let radius = pos_data.obb_size / 12.;
-    let nudge = if mirror { -radius } else { radius };
+    let arc_angle = PI - arc_angle_from_pi_radians;
+
+    let isometry_nudge = if mirror { -radius } else { radius };
+    let endpoint_nudge = isometry_nudge * Vec2::new(ops::cos(arc_angle), ops::sin(arc_angle));
     match dir_of_point {
         CompassOctant::North => (
             draw_line_data,
             DrawArcData {
                 isometry: Isometry2d {
                     rotation: Rot2::radians(PI + FRAC_PI_2),
-                    translation: Vec2::new(line_start.x - nudge.x, line_start.y),
+                    translation: Vec2::new(line_start.x - isometry_nudge.x, line_start.y),
                 },
-                arc_angle: PI,
+                arc_angle: arc_angle,
                 radius: radius.x,
                 color,
             },
-            Vec2::new(line_start.x - 2. * nudge.x, line_start.y),
+            Vec2::new(line_start.x - isometry_nudge.x, line_start.y)
+                + Rot2::IDENTITY * endpoint_nudge,
         ),
         CompassOctant::NorthEast => (
             draw_line_data,
@@ -143,31 +162,32 @@ pub(crate) fn calculate_arc(
                 isometry: Isometry2d {
                     rotation: Rot2::radians(PI + FRAC_PI_4),
                     translation: Vec2::new(
-                        line_start.x - nudge.x / SQRT_2,
-                        line_start.y + nudge.x / SQRT_2,
+                        line_start.x - isometry_nudge.x / SQRT_2,
+                        line_start.y + isometry_nudge.x / SQRT_2,
                     ),
                 },
-                arc_angle: PI,
+                arc_angle: arc_angle,
                 radius: radius.x,
                 color,
             },
             Vec2::new(
-                line_start.x - 2. * nudge.x / SQRT_2,
-                line_start.y + 2. * nudge.x / SQRT_2,
-            ),
+                line_start.x - isometry_nudge.x / SQRT_2,
+                line_start.y + isometry_nudge.x / SQRT_2,
+            ) + Rot2::radians(-FRAC_PI_4) * endpoint_nudge,
         ),
         CompassOctant::East => (
             draw_line_data,
             DrawArcData {
                 isometry: Isometry2d {
                     rotation: Rot2::PI,
-                    translation: Vec2::new(line_start.x, line_start.y + nudge.y),
+                    translation: Vec2::new(line_start.x, line_start.y + isometry_nudge.y),
                 },
-                arc_angle: PI,
+                arc_angle: arc_angle,
                 radius: radius.y,
                 color,
             },
-            Vec2::new(line_start.x, line_start.y + 2. * nudge.y),
+            Vec2::new(line_start.x, line_start.y + isometry_nudge.y)
+                + Rot2::radians(PI + FRAC_PI_2) * endpoint_nudge,
         ),
         CompassOctant::SouthEast => (
             draw_line_data,
@@ -175,31 +195,32 @@ pub(crate) fn calculate_arc(
                 isometry: Isometry2d {
                     rotation: Rot2::radians(FRAC_PI_2 + FRAC_PI_4),
                     translation: Vec2::new(
-                        line_start.x + nudge.y / SQRT_2,
-                        line_start.y + nudge.y / SQRT_2,
+                        line_start.x + isometry_nudge.y / SQRT_2,
+                        line_start.y + isometry_nudge.y / SQRT_2,
                     ),
                 },
-                arc_angle: PI,
+                arc_angle: arc_angle,
                 radius: radius.y,
                 color,
             },
             Vec2::new(
-                line_start.x + 2. * nudge.y / SQRT_2,
-                line_start.y + 2. * nudge.y / SQRT_2,
-            ),
+                line_start.x + isometry_nudge.y / SQRT_2,
+                line_start.y + isometry_nudge.y / SQRT_2,
+            ) + Rot2::radians(PI + FRAC_PI_4) * endpoint_nudge,
         ),
         CompassOctant::South => (
             draw_line_data,
             DrawArcData {
                 isometry: Isometry2d {
                     rotation: Rot2::FRAC_PI_2,
-                    translation: Vec2::new(line_start.x + nudge.x, line_start.y),
+                    translation: Vec2::new(line_start.x + isometry_nudge.x, line_start.y),
                 },
-                arc_angle: PI,
+                arc_angle: arc_angle,
                 radius: radius.x,
                 color,
             },
-            Vec2::new(line_start.x + 2. * nudge.x, line_start.y),
+            Vec2::new(line_start.x + isometry_nudge.x, line_start.y)
+                + Rot2::radians(PI) * endpoint_nudge,
         ),
         CompassOctant::SouthWest => (
             draw_line_data,
@@ -207,31 +228,32 @@ pub(crate) fn calculate_arc(
                 isometry: Isometry2d {
                     rotation: Rot2::FRAC_PI_4,
                     translation: Vec2::new(
-                        line_start.x + nudge.x / SQRT_2,
-                        line_start.y - nudge.x / SQRT_2,
+                        line_start.x + isometry_nudge.x / SQRT_2,
+                        line_start.y - isometry_nudge.x / SQRT_2,
                     ),
                 },
-                arc_angle: PI,
+                arc_angle: arc_angle,
                 radius: radius.x,
                 color,
             },
             Vec2::new(
-                line_start.x + 2. * nudge.x / SQRT_2,
-                line_start.y - 2. * nudge.x / SQRT_2,
-            ),
+                line_start.x + isometry_nudge.x / SQRT_2,
+                line_start.y - isometry_nudge.x / SQRT_2,
+            ) + Rot2::radians(FRAC_PI_2 + FRAC_PI_4) * endpoint_nudge,
         ),
         CompassOctant::West => (
             draw_line_data,
             DrawArcData {
                 isometry: Isometry2d {
                     rotation: Rot2::IDENTITY,
-                    translation: Vec2::new(line_start.x, line_start.y - nudge.y),
+                    translation: Vec2::new(line_start.x, line_start.y - isometry_nudge.y),
                 },
-                arc_angle: PI,
+                arc_angle: arc_angle,
                 radius: radius.y,
                 color,
             },
-            Vec2::new(line_start.x, line_start.y - 2. * nudge.y),
+            Vec2::new(line_start.x, line_start.y - isometry_nudge.y)
+                + Rot2::radians(FRAC_PI_2) * endpoint_nudge,
         ),
         CompassOctant::NorthWest => (
             draw_line_data,
@@ -239,18 +261,18 @@ pub(crate) fn calculate_arc(
                 isometry: Isometry2d {
                     rotation: Rot2::radians(-FRAC_PI_4),
                     translation: Vec2::new(
-                        line_start.x - nudge.y / SQRT_2,
-                        line_start.y - nudge.y / SQRT_2,
+                        line_start.x - isometry_nudge.y / SQRT_2,
+                        line_start.y - isometry_nudge.y / SQRT_2,
                     ),
                 },
-                arc_angle: PI,
+                arc_angle: arc_angle,
                 radius: radius.y,
                 color,
             },
             Vec2::new(
-                line_start.x - 2. * nudge.y / SQRT_2,
-                line_start.y - 2. * nudge.y / SQRT_2,
-            ),
+                line_start.x - isometry_nudge.y / SQRT_2,
+                line_start.y - isometry_nudge.y / SQRT_2,
+            ) + Rot2::radians(FRAC_PI_4) * endpoint_nudge,
         ),
     }
 }
