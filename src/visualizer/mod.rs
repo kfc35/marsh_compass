@@ -314,7 +314,7 @@ fn get_nav_viz_draw_data(
         )
     } else if (end - start).length() <= 2. * config.arrow_tip_length {
         // too short to potentially accommodate a line gradient
-        // TODO: Gizmo arrows should support line gradients on their own.
+        // Todo GH Issue #10: Gizmo arrows should support line gradients on their own.
         (
             meta_data,
             NavVizDrawData::ShortStraight([DrawLineData {

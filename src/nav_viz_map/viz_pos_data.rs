@@ -107,7 +107,7 @@ pub(crate) fn rebuild_entity_viz_pos_data(
 }
 
 /// This is somewhat redundant with `entity_to_camera_and_focusable_area`
-/// possible todo: merge the two so we are not querying twice.
+/// Possible todo: merge the two so we are not querying twice.
 fn get_rotation_and_obb_size(
     entity: Entity,
     position_data_query: &Query<(&ComputedNode, &UiGlobalTransform)>,
