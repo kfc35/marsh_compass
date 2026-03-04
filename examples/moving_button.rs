@@ -38,6 +38,7 @@ fn main() {
         // Example specific resource
         .init_resource::<ActionState>()
         .init_resource::<TranslationToggle>()
+        .init_resource::<ScaleToggle>()
         .init_resource::<OrderedButtons>()
         // Add this plugin for the visualization to render.
         .add_plugins(AutoNavVizPlugin)
@@ -79,6 +80,16 @@ impl Default for TranslationToggle {
     }
 }
 
+/// A resource that denotes whether the [`MovingButton`] can is scaled long.
+#[derive(Resource)]
+struct ScaleToggle(bool);
+
+impl Default for ScaleToggle {
+    fn default() -> Self {
+        Self(false)
+    }
+}
+
 fn setup(
     mut commands: Commands,
     mut input_focus: ResMut<InputFocus>,
@@ -106,9 +117,10 @@ fn setup(
             children![Text::new(
                 "Press `1` to toggle translation.\n\n\
                 Press `2` to toggle rotation.\n\n\
-                Press `3` to toggle manual looping edge E <-> W.\n\n\
-                Press `4` to toggle manual looping edge N <-> S.\n\n\
-                Press `5` to cycle through min alignment factors.\n\n\
+                Press `3` to toggle scaling.\n\n\
+                Press `4` to toggle manual looping edge E <-> W.\n\n\
+                Press `5` to toggle manual looping edge N <-> S.\n\n\
+                Press `6` to cycle through min alignment factors.\n\n\
                 Use the D-Pad or Arrow Keys to navigate."
             ),],
         ))
@@ -228,6 +240,8 @@ fn move_button(
 fn process_toggles(
     keyboard: Res<ButtonInput<Key>>,
     mut translation_toggle: ResMut<TranslationToggle>,
+    mut moving_button_query: Query<&mut UiTransform, With<MovingButton>>,
+    mut scale_toggle: ResMut<ScaleToggle>,
     mut virtual_time: ResMut<Time<Virtual>>,
     buttons: Res<OrderedButtons>,
     mut override_map: ResMut<DirectionalNavigationMap>,
@@ -245,6 +259,17 @@ fn process_toggles(
         }
     }
     if keyboard.just_pressed(Key::Character("3".into())) {
+        scale_toggle.0 ^= true;
+
+        for mut transform in &mut moving_button_query {
+            if scale_toggle.0 {
+                transform.scale = Vec2::new(2., 1.);
+            } else {
+                transform.scale = Vec2::ONE;
+            }
+        }
+    }
+    if keyboard.just_pressed(Key::Character("4".into())) {
         if override_map
             .get_neighbor(buttons[0], CompassOctant::East)
             .is_none()
@@ -273,7 +298,7 @@ fn process_toggles(
                 .neighbors[CompassOctant::West.to_index()] = None;
         }
     }
-    if keyboard.just_pressed(Key::Character("4".into())) {
+    if keyboard.just_pressed(Key::Character("5".into())) {
         if override_map
             .get_neighbor(buttons[0], CompassOctant::North)
             .is_none()
@@ -302,7 +327,7 @@ fn process_toggles(
                 .neighbors[CompassOctant::South.to_index()] = None;
         }
     }
-    if keyboard.just_pressed(Key::Character("5".into())) {
+    if keyboard.just_pressed(Key::Character("6".into())) {
         if config.min_alignment_factor == 1. {
             config.min_alignment_factor = 0.;
         } else {
