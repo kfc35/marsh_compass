@@ -107,7 +107,7 @@ fn setup(
                 "Press `1` to toggle translation.\n\n\
                 Press `2` to toggle rotation.\n\n\
                 Press `3` to toggle manual looping edge E <-> W.\n\n\
-                Press `4` to toggle manual looping edge N <-> W.\n\n\
+                Press `4` to toggle manual looping edge N <-> S.\n\n\
                 Press `5` to cycle through min alignment factors.\n\n\
                 Use the D-Pad or Arrow Keys to navigate."
             ),],
@@ -129,7 +129,7 @@ fn setup(
             children![(
                 Node { ..default() },
                 MinAlignmentFactorText,
-                Text::new("Min Alignment Factor: 0.\n\n")
+                Text::new("Min Alignment Factor: 0\n\n")
             ),],
         ))
         .id();
