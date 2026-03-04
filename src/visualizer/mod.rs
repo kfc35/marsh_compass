@@ -442,6 +442,11 @@ pub(crate) fn get_local_nudge(
     end_dir: CompassOctant,
     symm_edge_settings: SymmetricalEdgeSettings,
 ) -> (Vec2, Vec2) {
+    // Nudge by one sixteenth of the local size of each node.
+    // Since looped edges can take up to 1/6 of a side (`calculate_arc`), with 4 looped
+    // edges max per side, there is not much room for nudging (just 1/3 of a side).
+    // One sixteenth is very reasonable and looks good aesthetically, which, spread
+    // equally between looped edges, is an additional 1/4 of a side.
     let start_nudge_units = match symm_edge_settings {
         SymmetricalEdgeSettings::SpacingBetweenSingleArrows => from_local_size / 16.,
         _ => Vec2::ZERO,
@@ -571,115 +576,109 @@ fn get_closest_point_in_dir(
 mod tests {
     use super::*;
 
-    // #[test]
-    // fn test_arrow_endpoints_for_single_entity_in_dir() {
-    //     let config = AutoNavVizGizmoConfigGroup::default();
-    //     let from_pos = Vec2::new(0., 0.);
-    //     let from_size = Vec2::new(10., 20.);
-    //     let to_pos = Vec2::new(20., 0.);
-    //     let to_size = Vec2::new(8., 12.);
+    #[test]
+    fn test_local_nudge() {
+        let (start_nudge, end_nudge) = get_local_nudge(
+            Vec2::new(30., 20.),
+            CompassOctant::North,
+            Vec2::new(7., 12.),
+            CompassOctant::South,
+            SymmetricalEdgeSettings::OverlappingSingleArrows,
+        );
+        // Not `SpacingBetweenSingleArrows`, so no nudge applied
+        assert_eq!(start_nudge, Vec2::ZERO);
+        assert_eq!(end_nudge, Vec2::ZERO);
 
-    //     // since we are only drawing for the current focus, the symmetrical
-    //     // aspect of the edge should not apply nudges.
-    //     for is_symmetrical in [true, false] {
-    //         let (start, end) = get_arrow_endpoints(
-    //             from_pos,
-    //             from_size,
-    //             CompassOctant::NorthEast,
-    //             to_pos,
-    //             to_size,
-    //             is_symmetrical,
-    //             &config,
-    //         );
+        let (start_nudge, end_nudge) = get_local_nudge(
+            Vec2::new(30., 20.),
+            CompassOctant::North,
+            Vec2::new(7., 12.),
+            CompassOctant::South,
+            SymmetricalEdgeSettings::SpacingBetweenSingleArrows,
+        );
+        // moves west for both
+        assert_eq!(start_nudge, Vec2::new(-30. / 16., 0.));
+        assert_eq!(end_nudge, Vec2::new(-7. / 16., 0.));
 
-    //         assert_eq!(start, Vec2::new(5., 10.));
-    //         // to's NW Corner
-    //         assert_eq!(end, Vec2::new(16., 6.));
+        let (start_nudge, end_nudge) = get_local_nudge(
+            Vec2::new(30., 20.),
+            CompassOctant::South,
+            Vec2::new(7., 12.),
+            CompassOctant::North,
+            SymmetricalEdgeSettings::SpacingBetweenSingleArrows,
+        );
+        // moves east for both
+        assert_eq!(start_nudge, Vec2::new(30. / 16., 0.));
+        assert_eq!(end_nudge, Vec2::new(7. / 16., 0.));
 
-    //         let (start, end) = get_arrow_endpoints(
-    //             from_pos,
-    //             from_size,
-    //             CompassOctant::East,
-    //             to_pos,
-    //             to_size,
-    //             is_symmetrical,
-    //             &config,
-    //         );
+        let (start_nudge, end_nudge) = get_local_nudge(
+            Vec2::new(30., 20.),
+            CompassOctant::East,
+            Vec2::new(7., 12.),
+            CompassOctant::West,
+            SymmetricalEdgeSettings::SpacingBetweenSingleArrows,
+        );
+        // moves north for both
+        assert_eq!(start_nudge, Vec2::new(0., 20. / 16.));
+        assert_eq!(end_nudge, Vec2::new(0., 12. / 16.));
 
-    //         assert_eq!(start, Vec2::new(5., 0.));
-    //         // to's Western midpoint
-    //         assert_eq!(end, Vec2::new(16., 0.));
+        let (start_nudge, end_nudge) = get_local_nudge(
+            Vec2::new(30., 20.),
+            CompassOctant::West,
+            Vec2::new(7., 12.),
+            CompassOctant::East,
+            SymmetricalEdgeSettings::SpacingBetweenSingleArrows,
+        );
+        // moves south for both
+        assert_eq!(start_nudge, Vec2::new(0., -20. / 16.));
+        assert_eq!(end_nudge, Vec2::new(0., -12. / 16.));
 
-    //         let (start, end) = get_arrow_endpoints(
-    //             from_pos,
-    //             from_size,
-    //             CompassOctant::SouthEast,
-    //             to_pos,
-    //             to_size,
-    //             is_symmetrical,
-    //             &config,
-    //         );
+        let (start_nudge, end_nudge) = get_local_nudge(
+            Vec2::new(30., 20.),
+            CompassOctant::NorthEast,
+            Vec2::new(7., 12.),
+            CompassOctant::SouthWest,
+            SymmetricalEdgeSettings::SpacingBetweenSingleArrows,
+        );
+        // moves west
+        assert_eq!(start_nudge, Vec2::new(-30. / 16., 0.));
+        // moves north
+        assert_eq!(end_nudge, Vec2::new(0., 12. / 16.));
 
-    //         assert_eq!(start, Vec2::new(5., -10.));
-    //         // to's SW Corner
-    //         assert_eq!(end, Vec2::new(16., -6.));
-    //     }
-    // }
+        let (start_nudge, end_nudge) = get_local_nudge(
+            Vec2::new(30., 20.),
+            CompassOctant::SouthWest,
+            Vec2::new(7., 12.),
+            CompassOctant::NorthEast,
+            SymmetricalEdgeSettings::SpacingBetweenSingleArrows,
+        );
+        // moves east
+        assert_eq!(start_nudge, Vec2::new(30. / 16., 0.));
+        // moves south
+        assert_eq!(end_nudge, Vec2::new(0., -12. / 16.));
 
-    // #[test]
-    // fn test_arrow_endpoints_for_draw_for_all_in_dir_symmetrical() {
-    //     let config = AutoNavVizGizmoConfigGroup {
-    //         symmetrical_edge_spacing: 2.,
-    //         draw_mode: AutoNavVizDrawMode::EnabledForAll,
-    //         ..default()
-    //     };
-    //     let from_pos = Vec2::new(10., 0.);
-    //     let from_size = Vec2::new(5., 6.);
-    //     let to_pos = Vec2::new(12., -20.);
-    //     let to_size = Vec2::new(3., 9.);
+        let (start_nudge, end_nudge) = get_local_nudge(
+            Vec2::new(30., 20.),
+            CompassOctant::NorthWest,
+            Vec2::new(7., 12.),
+            CompassOctant::SouthEast,
+            SymmetricalEdgeSettings::SpacingBetweenSingleArrows,
+        );
+        // moves south
+        assert_eq!(start_nudge, Vec2::new(0., -20. / 16.));
+        // moves west
+        assert_eq!(end_nudge, Vec2::new(-7. / 16., 0.));
 
-    //     let (start, end) = get_arrow_endpoints(
-    //         from_pos,
-    //         from_size,
-    //         CompassOctant::SouthWest,
-    //         to_pos,
-    //         to_size,
-    //         true,
-    //         &config,
-    //     );
-    //     // Nudged one unit east
-    //     assert_eq!(start, Vec2::new(7.5 + 1., -3.));
-    //     // Uses NW corner nudged one unit south
-    //     assert_eq!(end, Vec2::new(10.5, -15.5 - 1.));
-
-    //     let (start, end) = get_arrow_endpoints(
-    //         from_pos,
-    //         from_size,
-    //         CompassOctant::South,
-    //         to_pos,
-    //         to_size,
-    //         true,
-    //         &config,
-    //     );
-    //     // Southern point, Nudged one unit east
-    //     assert_eq!(start, Vec2::new(10. + 1., -3.));
-    //     // Uses NW Corner because it is closer
-    //     // Nudged one unit east
-    //     assert_eq!(end, Vec2::new(10.5 + 1., -15.5));
-
-    //     let (start, end) = get_arrow_endpoints(
-    //         from_pos,
-    //         from_size,
-    //         CompassOctant::SouthEast,
-    //         to_pos,
-    //         to_size,
-    //         true,
-    //         &config,
-    //     );
-    //     // SE point, nudged one unit north
-    //     assert_eq!(start, Vec2::new(12.5, -3. + 1.));
-    //     // Uses the Northern point because it is closer
-    //     // Nudged one unit east
-    //     assert_eq!(end, Vec2::new(12. + 1., -15.5));
-    // }
+        let (start_nudge, end_nudge) = get_local_nudge(
+            Vec2::new(30., 20.),
+            CompassOctant::SouthEast,
+            Vec2::new(7., 12.),
+            CompassOctant::NorthWest,
+            SymmetricalEdgeSettings::SpacingBetweenSingleArrows,
+        );
+        // moves north
+        assert_eq!(start_nudge, Vec2::new(0., 20. / 16.));
+        // moves east
+        assert_eq!(end_nudge, Vec2::new(7. / 16., 0.));
+    }
 }
