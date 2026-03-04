@@ -5,6 +5,7 @@
 //! The arrow keys / D-pad can be used to change focus between buttons. If the draw
 //! mode is set to "Enabled for Current Focus", this will update the navigation
 //! visualization.
+//!
 //! The plugin settings and the example itself can be changed with certain key-presses.
 //! Run the example and feel free to play around with the different settings
 //! to see which one best fits your style/application.

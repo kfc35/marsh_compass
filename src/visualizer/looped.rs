@@ -95,7 +95,7 @@ pub(crate) fn new_looped_draw_data(
 ///
 /// For ending arcs, the arc should be drawn mirrored (`mirror` set to true) for aesthetics.
 /// line_type should also be set to [`DrawLineType::Arrow`].
-pub(crate) fn calculate_arc(
+fn calculate_arc(
     (point, pos_data, dir_of_point): (Vec2, &NavVizPosData, CompassOctant),
     angle_from_pi_radians: f32,
     mirror: bool,
@@ -351,7 +351,7 @@ pub(crate) fn calculate_arc(
         // To calculate the final endpoint:
         // - go to where the center of the arc is (`isometry_translation`)
         // - orient correctly (`arc_endpoint_rotation`)
-        // - then follow the arc the correct angle length via `relative_endpoint_of_arc`
+        // - then follow the arc for the correct angle length via `relative_endpoint_of_arc`
         isometry_translation + arc_endpoint_rotation * relative_endpoint_of_arc,
     )
 }
