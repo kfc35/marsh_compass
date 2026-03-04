@@ -33,49 +33,14 @@ pub(crate) fn new_looped_draw_data(
         // The line should not be drawn with a gradient.
         DrawLineType::Line(None)
     };
-    let start_to_end_dir = (end_point - start_point).normalize();
-    // We work off the default assumption that the arrow will head in the exact
-    // opposite direction as the `start_point_dir`. This corresponds with
-    // a 180 degree rotation, aka pi-radians rotation.
-    // This dot product is how much we deviate from that assumption.
-    let mut radians_from_pi_arc = ops::acos(
-        Into::<Dir2>::into(start_point_dir.opposite())
-            .as_vec2()
-            .dot(start_to_end_dir),
-    );
-    // Since the dot product is always positive, we need to figure out
-    // Whether to add or subtract from the pi-radians rotation.
-    // For that, we use the cross product.
-    let orientation =
-        start_to_end_dir.perp_dot(Into::<Dir2>::into(start_point_dir.opposite()).as_vec2());
-    if orientation > 0. {
-        radians_from_pi_arc *= -1.;
-    }
     let (start_line, start_arc, line_start) = calculate_arc(
         (start_point, from_pos_data, start_point_dir),
         false,
         override_color.unwrap_or(from_color),
         start_line_line_type,
-        radians_from_pi_arc,
+        get_angle_from_pi_rotation(start_point, start_point_dir, end_point),
         config,
     );
-
-    let end_to_start_dir = (start_point - end_point).normalize();
-    let mut another_radians_from_pi_arc = ops::acos(
-        Into::<Dir2>::into(end_point_dir.opposite())
-            .as_vec2()
-            .dot(end_to_start_dir),
-    );
-
-    // Since the dot product is always positive, we need to figure out
-    // Whether to add or subtract from the pi-radians rotation.
-    // For that, we use the cross product.
-    let other_orientation =
-        end_to_start_dir.perp_dot(Into::<Dir2>::into(end_point_dir.opposite()).as_vec2());
-    // this is correct with the radians adding logic
-    if other_orientation > 0. {
-        another_radians_from_pi_arc *= -1.;
-    }
 
     // The ending arc should always end in an arrow
     let (end_line, end_arc, line_end) = calculate_arc(
@@ -83,9 +48,10 @@ pub(crate) fn new_looped_draw_data(
         true,
         override_color.unwrap_or(to_color),
         DrawLineType::Arrow,
-        another_radians_from_pi_arc,
+        get_angle_from_pi_rotation(end_point, end_point_dir, start_point),
         config,
     );
+
     let gradient_color = if override_color.is_some() {
         None
     } else {
@@ -97,6 +63,7 @@ pub(crate) fn new_looped_draw_data(
         color: override_color.unwrap_or(from_color),
         line_type: DrawLineType::Line(gradient_color),
     };
+
     NavVizDrawData::Looped(DrawLoopedLineData {
         start_arc,
         end_arc,
@@ -384,4 +351,35 @@ pub(crate) fn calculate_arc(
         // - then follow the arc the correct angle length via `relative_endpoint_of_arc`
         isometry_translation + arc_endpoint_rotation * relative_endpoint_of_arc,
     )
+}
+
+/// This function returns the angle between:
+/// - The vector that represents `dir_from_start.opposite()`
+/// - The vector from `from_point` to `to_point`
+///
+/// Since `dir_from_start.opposite()` is equivalent to a rotation by `PI`, this
+/// angle is returned relative to that rotation.
+///
+/// This is eventually used to figure out the curvature of the arc that is created near `start`.
+/// The signed dot product will be used to adjust how much of the semi-circle arc (arc_angle = PI)
+/// is drawn.
+fn get_angle_from_pi_rotation(start: Vec2, dir_from_start: CompassOctant, end: Vec2) -> f32 {
+    let pi_rotation = dir_from_start.opposite();
+    let start_to_end_dir = (end - start).normalize();
+    let mut radians_from_pi_arc = ops::acos(
+        Into::<Dir2>::into(pi_rotation)
+            .as_vec2()
+            .dot(start_to_end_dir),
+    );
+
+    // Since the dot product is always positive, we need to figure out
+    // the orientation of this difference from `pi_rotation`
+    // For that, we use the cross product.
+    // A positive dot product will be associated with a negative angle.
+    let orientation = start_to_end_dir.perp_dot(Into::<Dir2>::into(pi_rotation).as_vec2());
+    if orientation > 0. {
+        radians_from_pi_arc *= -1.;
+    }
+
+    radians_from_pi_arc
 }
