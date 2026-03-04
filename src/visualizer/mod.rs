@@ -104,7 +104,7 @@ pub struct DrawLineData {
 
 /// An enum used by [`DrawLineData`] to denote whether the line should
 /// be drawn as a Line, Arrow, or a Double Ended Arrow
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum DrawLineType {
     /// Used to represent a line. If a color is provided, this line
     /// will be drawn with a gradient via `line_gradient_2d`, using

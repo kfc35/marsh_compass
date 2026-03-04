@@ -141,15 +141,17 @@ fn calculate_arc(
         (PI + angle_from_pi_radians, radius)
     };
 
-    // Finds the placement of a point along the circle with a given radius.
+    // Finds the placement of a point along the circle
     // It needs to be translated to where the arc is and then rotated to be
     // oriented to the created arc, hence "relative"
-    let relative_endpoint_of_arc = if mirror {
-        // This traverses the mirror side's arc clockwise starting from `-Vec2::X`
-        radius * Vec2::new(-ops::cos(angle), ops::sin(angle))
-    } else {
-        // This traverses the regular side's arc counterclockwise starting from `Vec2::X`
-        radius * Vec2::new(ops::cos(angle), ops::sin(angle))
+    let find_endpoint_of_arc = |radius: f32| -> Vec2 {
+        if mirror {
+            // This traverses the mirror side's arc clockwise starting from `-Vec2::X`
+            radius * Vec2::new(-ops::cos(angle), ops::sin(angle))
+        } else {
+            // This traverses the regular side's arc counterclockwise starting from `Vec2::X`
+            radius * Vec2::new(ops::cos(angle), ops::sin(angle))
+        }
     };
 
     let arc_angle = if mirror {
@@ -354,7 +356,7 @@ fn calculate_arc(
         // - go to where the center of the arc is (`isometry_translation`)
         // - orient correctly (`arc_endpoint_rotation`)
         // - then follow the arc for the correct angle length via `relative_endpoint_of_arc`
-        isometry_translation + arc_endpoint_rotation * relative_endpoint_of_arc,
+        isometry_translation + arc_endpoint_rotation * (find_endpoint_of_arc(arc_radius)),
     )
 }
 
@@ -393,28 +395,11 @@ fn get_angle_from_pi_rotation(
     radians_from_pi_arc
 }
 
-// TODO test for get_angle_from_pi_rotation, calculate_arc
 #[cfg(test)]
 mod tests {
     use std::f32::consts::FRAC_PI_2;
 
     use super::*;
-
-    fn assert_eq_vec2(left: Vec2, right: Vec2) {
-        let difference = left - right;
-        assert!(
-            ops::abs(difference.x) <= 1e-6,
-            "left: {}\n right: {}",
-            left,
-            right
-        );
-        assert!(
-            ops::abs(difference.y) <= 1e-6,
-            "left: {}\n right: {}",
-            left,
-            right
-        );
-    }
 
     fn assert_eq_f32(left: f32, right: f32) {
         let difference = left - right;
@@ -462,5 +447,79 @@ mod tests {
             Into::<Dir2>::into(CompassOctant::West).as_vec2(),
         );
         assert_eq_f32(angle, -FRAC_PI_2);
+    }
+
+    #[test]
+    fn test_calculate_arc() {
+        let mut config = AutoNavVizGizmoConfigGroup::default();
+        config.arrow_tip_length = 5.;
+
+        // Straightforward Test
+        let (line, arc, endpoint) = calculate_arc(
+            (Vec2::ZERO, Vec2::new(12., 18.), CompassOctant::North),
+            0.,
+            false,
+            Color::Srgba(Srgba::RED),
+            DrawLineType::Arrow,
+            &config,
+        );
+        // arrow tip length shifts the start north
+        let expected_arc_start = Vec2::new(0., 5.);
+        assert_eq!(line.start, expected_arc_start);
+        assert_eq!(line.end, Vec2::ZERO);
+        assert_eq!(line.color, Color::Srgba(Srgba::RED));
+        assert_eq!(line.line_type, DrawLineType::Arrow);
+
+        let expected_radius = 1.; // 12. * RADIUS_LOCAL_SIZE_PROPORTION
+        assert_eq!(
+            arc.isometry.translation,
+            expected_arc_start + Vec2::new(-expected_radius, 0.)
+        );
+        assert_eq!(arc.isometry.rotation, Rot2::radians(PI + FRAC_PI_2));
+        assert_eq!(arc.radius, expected_radius);
+        assert_eq!(arc.arc_angle, PI);
+        assert_eq!(arc.color, Color::Srgba(Srgba::RED));
+
+        assert_eq!(
+            endpoint,
+            expected_arc_start + 2. * Vec2::new(-expected_radius, 0.)
+        );
+
+        // Mirrored test with angle
+        let (line, arc, endpoint) = calculate_arc(
+            (Vec2::ZERO, Vec2::new(12., 18.), CompassOctant::East),
+            FRAC_PI_4,
+            true,
+            Color::Srgba(Srgba::RED),
+            DrawLineType::Arrow,
+            &config,
+        );
+        // arrow tip length shifts the start north
+        let expected_arc_start = Vec2::new(5., 0.);
+        assert_eq!(line.start, expected_arc_start);
+        assert_eq!(line.end, Vec2::ZERO);
+        assert_eq!(line.color, Color::Srgba(Srgba::RED));
+        assert_eq!(line.line_type, DrawLineType::Arrow);
+
+        let expected_radius = 1.5; // 18. * RADIUS_LOCAL_SIZE_PROPORTION
+        assert_eq!(
+            arc.isometry.translation,
+            expected_arc_start + Vec2::new(0., -expected_radius)
+        );
+        assert_eq!(arc.isometry.rotation, Rot2::IDENTITY);
+        assert_eq!(arc.radius, expected_radius);
+        // it's a negative number because it is mirrored.
+        // the angle is subtracted from PI because it is mirrored.
+        assert_eq!(arc.arc_angle, -(PI - FRAC_PI_4));
+        assert_eq!(arc.color, Color::Srgba(Srgba::RED));
+
+        // translate to the center of the arc and then add the relative point along the arc
+        assert_eq!(
+            endpoint,
+            expected_arc_start
+                + Vec2::new(0., -expected_radius)
+                + Rot2::radians(PI + FRAC_PI_2)
+                    * (expected_radius * Vec2::new(1. / SQRT_2, 1. / SQRT_2))
+        );
     }
 }
