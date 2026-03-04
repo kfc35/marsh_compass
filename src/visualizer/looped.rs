@@ -390,13 +390,14 @@ pub(crate) fn calculate_arc_mirror(
     let isometry_nudge = -radius;
     let endpoint_nudge = isometry_nudge * Vec2::new(-ops::cos(arc_angle), ops::sin(arc_angle));
     // TODO the opposite end of the arc is shrinking, so it seems the arc anchor point needs to change?
-    // The endpoint nudge seems to work correctly now. it's just that the 
+    // The endpoint nudge seems to work correctly now. it's just that the
     // arc edges need to be switched somehow.
 
     let neg_arc_angle = -arc_angle;
     match dir_of_point {
         CompassOctant::North => {
-            let (isometry_rotation, endpoint_rotation) = (Rot2::radians(FRAC_PI_2), Rot2::radians(PI));
+            let (isometry_rotation, endpoint_rotation) =
+                (Rot2::radians(FRAC_PI_2), Rot2::radians(PI));
             (
                 draw_line_data,
                 DrawArcData {
@@ -413,8 +414,10 @@ pub(crate) fn calculate_arc_mirror(
             )
         }
         CompassOctant::NorthEast => {
-            let (isometry_rotation, endpoint_rotation) =
-                (Rot2::radians(FRAC_PI_4), Rot2::radians(FRAC_PI_2 + FRAC_PI_4));
+            let (isometry_rotation, endpoint_rotation) = (
+                Rot2::radians(FRAC_PI_4),
+                Rot2::radians(FRAC_PI_2 + FRAC_PI_4),
+            );
             (
                 draw_line_data,
                 DrawArcData {
@@ -436,8 +439,7 @@ pub(crate) fn calculate_arc_mirror(
             )
         }
         CompassOctant::East => {
-            let (isometry_rotation, endpoint_rotation) =
-                (Rot2::IDENTITY, Rot2::radians(FRAC_PI_2));
+            let (isometry_rotation, endpoint_rotation) = (Rot2::IDENTITY, Rot2::radians(FRAC_PI_2));
             (
                 draw_line_data,
                 DrawArcData {
@@ -495,10 +497,8 @@ pub(crate) fn calculate_arc_mirror(
             )
         }
         CompassOctant::SouthWest => {
-            let (isometry_rotation, endpoint_rotation) = (
-                Rot2::radians(PI + FRAC_PI_4),
-                Rot2::radians(-FRAC_PI_4),
-            );
+            let (isometry_rotation, endpoint_rotation) =
+                (Rot2::radians(PI + FRAC_PI_4), Rot2::radians(-FRAC_PI_4));
             (
                 draw_line_data,
                 DrawArcData {
@@ -521,7 +521,7 @@ pub(crate) fn calculate_arc_mirror(
         }
         CompassOctant::West => {
             let (isometry_rotation, endpoint_rotation) =
-                (Rot2::radians(PI), Rot2::radians(PI + FRAC_PI_2 ));
+                (Rot2::radians(PI), Rot2::radians(PI + FRAC_PI_2));
             (
                 draw_line_data,
                 DrawArcData {
