@@ -101,8 +101,9 @@ fn get_rotated_bounds(size: Vec2, rotation: f32) -> Vec2 {
     if rotation == 0.0 {
         return size;
     }
-    let cos_r = ops::cos(rotation).abs();
-    let sin_r = ops::sin(rotation).abs();
+    // Replaced .abs() with ops::abs
+    let cos_r = ops::abs(ops::cos(rotation));
+    let sin_r = ops::abs(ops::sin(rotation));
     Vec2::new(
         size.x * cos_r + size.y * sin_r,
         size.x * sin_r + size.y * cos_r,
