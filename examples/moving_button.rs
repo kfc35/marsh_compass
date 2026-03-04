@@ -107,7 +107,8 @@ fn setup(
                 "Press `1` to toggle translation.\n\n\
                 Press `2` to toggle rotation.\n\n\
                 Press `3` to toggle manual looping edge E <-> W.\n\n\
-                Press `4` to cycle through min alignment factors.\n\n\
+                Press `4` to toggle manual looping edge N <-> W.\n\n\
+                Press `5` to cycle through min alignment factors.\n\n\
                 Use the D-Pad or Arrow Keys to navigate."
             ),],
         ))
@@ -244,13 +245,64 @@ fn process_toggles(
         }
     }
     if keyboard.just_pressed(Key::Character("3".into())) {
-        if override_map.neighbors.is_empty() {
+        if override_map
+            .get_neighbor(buttons[0], CompassOctant::East)
+            .is_none()
+        {
             override_map.add_looping_edges(&[buttons[0], buttons[1]], CompassOctant::East);
         } else {
-            override_map.clear();
+            override_map
+                .neighbors
+                .get_mut(&buttons[0])
+                .unwrap()
+                .neighbors[CompassOctant::East.to_index()] = None;
+            override_map
+                .neighbors
+                .get_mut(&buttons[0])
+                .unwrap()
+                .neighbors[CompassOctant::West.to_index()] = None;
+            override_map
+                .neighbors
+                .get_mut(&buttons[1])
+                .unwrap()
+                .neighbors[CompassOctant::East.to_index()] = None;
+            override_map
+                .neighbors
+                .get_mut(&buttons[1])
+                .unwrap()
+                .neighbors[CompassOctant::West.to_index()] = None;
         }
     }
     if keyboard.just_pressed(Key::Character("4".into())) {
+        if override_map
+            .get_neighbor(buttons[0], CompassOctant::North)
+            .is_none()
+        {
+            override_map.add_looping_edges(&[buttons[0], buttons[1]], CompassOctant::North);
+        } else {
+            override_map
+                .neighbors
+                .get_mut(&buttons[0])
+                .unwrap()
+                .neighbors[CompassOctant::North.to_index()] = None;
+            override_map
+                .neighbors
+                .get_mut(&buttons[0])
+                .unwrap()
+                .neighbors[CompassOctant::South.to_index()] = None;
+            override_map
+                .neighbors
+                .get_mut(&buttons[1])
+                .unwrap()
+                .neighbors[CompassOctant::North.to_index()] = None;
+            override_map
+                .neighbors
+                .get_mut(&buttons[1])
+                .unwrap()
+                .neighbors[CompassOctant::South.to_index()] = None;
+        }
+    }
+    if keyboard.just_pressed(Key::Character("5".into())) {
         if config.min_alignment_factor == 1. {
             config.min_alignment_factor = 0.;
         } else {
