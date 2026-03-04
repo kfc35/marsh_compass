@@ -175,7 +175,7 @@ mod tests {
     use bevy::math::CompassOctant;
 
     #[test]
-    fn test_merger_one_edge() {
+    fn test_one_edge() {
         let mut app = App::new();
         let one_edge_merge_system = |mut merger: AsymmetricalStraightEdgeMerger| {
             let mut nav_viz_map = NavVizMap::default();
@@ -211,7 +211,7 @@ mod tests {
                 e1,
                 NavVizPosData {
                     aabb_size: Vec2::splat(1.),
-                    transformation: Isometry2d::IDENTITY,
+                    transformation: Isometry2d::from_translation(Vec2::new(0., -1.)),
                     obb_size: Vec2::splat(1.),
                 },
             );
@@ -219,7 +219,7 @@ mod tests {
                 e2,
                 NavVizPosData {
                     aabb_size: Vec2::splat(1.),
-                    transformation: Isometry2d::from_translation(Vec2::new(5., 0.)),
+                    transformation: Isometry2d::from_translation(Vec2::new(5., -1.)),
                     obb_size: Vec2::splat(1.),
                 },
             );
@@ -227,7 +227,7 @@ mod tests {
                 e3,
                 NavVizPosData {
                     aabb_size: Vec2::splat(1.),
-                    transformation: Isometry2d::from_translation(Vec2::new(0., 5.)),
+                    transformation: Isometry2d::from_translation(Vec2::new(0., 4.)),
                     obb_size: Vec2::splat(1.),
                 },
             );
@@ -251,7 +251,7 @@ mod tests {
     }
 
     #[test]
-    fn test_merger_merge_gradient() {
+    fn test_merge_gradient() {
         let mut app = App::new();
         let two_edges_merged_system = |mut merger: AsymmetricalStraightEdgeMerger| {
             let mut nav_viz_map = NavVizMap::default();
@@ -293,8 +293,8 @@ mod tests {
                     color: Color::Srgba(Srgba::GREEN),
                 },
                 DrawLineData {
-                    start: Vec2::new(2., 0.),
-                    end: Vec2::new(3., 0.),
+                    start: Vec2::new(3., 0.),
+                    end: Vec2::new(2., 0.),
                     line_type: DrawLineType::Line(Some(Color::Srgba(Srgba::GREEN))),
                     color: Color::Srgba(Srgba::RED),
                 },
@@ -309,7 +309,7 @@ mod tests {
                 e1,
                 NavVizPosData {
                     aabb_size: Vec2::splat(1.),
-                    transformation: Isometry2d::IDENTITY,
+                    transformation: Isometry2d::from_translation(Vec2::new(0., -1.)),
                     obb_size: Vec2::splat(1.),
                 },
             );
@@ -317,7 +317,7 @@ mod tests {
                 e2,
                 NavVizPosData {
                     aabb_size: Vec2::splat(1.),
-                    transformation: Isometry2d::from_translation(Vec2::new(5., 0.)),
+                    transformation: Isometry2d::from_translation(Vec2::new(5., -1.)),
                     obb_size: Vec2::splat(1.),
                 },
             );
@@ -325,7 +325,7 @@ mod tests {
                 e3,
                 NavVizPosData {
                     aabb_size: Vec2::splat(1.),
-                    transformation: Isometry2d::from_translation(Vec2::new(0., 5.)),
+                    transformation: Isometry2d::from_translation(Vec2::new(0., 4.)),
                     obb_size: Vec2::splat(1.),
                 },
             );
@@ -342,8 +342,8 @@ mod tests {
                     color: Color::Srgba(Srgba::RED),
                 },
                 DrawLineData {
-                    start: Vec2::new(2., 0.),
-                    end: Vec2::new(3., 0.),
+                    start: Vec2::new(3., 0.),
+                    end: Vec2::new(2., 0.),
                     line_type: DrawLineType::Line(Some(Color::Srgba(Srgba::RED))),
                     color: Color::Srgba(Srgba::GREEN),
                 },
@@ -358,19 +358,29 @@ mod tests {
                 .line_data_to_draw
                 .sort_by(|d1, d2| d1.end.x.partial_cmp(&d2.end.x).expect("Not using NaN"));
             for (index, line_data) in merger.line_data_to_draw.iter().enumerate() {
-                assert_eq!(expected[index].start, line_data.start);
-                assert_eq!(expected[index].end, line_data.end);
                 if index == 1 {
                     //either ordering is ok
-                    let field_is_red = expected[index].color == Color::Srgba(Srgba::RED);
-                    assert!(expected[index].color == Color::Srgba(Srgba::GREEN) || field_is_red);
+                    let start_is_e2 = line_data.start == Vec2::new(3., 0.);
+                    assert!(line_data.start == Vec2::new(2., 0.) || start_is_e2);
                     assert!(
-                        expected[index].line_type
-                            == DrawLineType::Line(Some(Color::Srgba(Srgba::RED)))
-                            || (field_is_red
-                                && expected[index].line_type
-                                    == DrawLineType::Line(Some(Color::Srgba(Srgba::GREEN))))
-                    )
+                        line_data.end == Vec2::new(3., 0.)
+                            || (start_is_e2 && line_data.end == Vec2::new(2., 0.))
+                    );
+                    assert!(
+                        line_data.color == Color::Srgba(Srgba::RED)
+                            || (start_is_e2 && line_data.color == Color::Srgba(Srgba::GREEN))
+                    );
+                    assert!(
+                        line_data.line_type == DrawLineType::Line(Some(Color::Srgba(Srgba::GREEN)))
+                            || (start_is_e2
+                                && line_data.line_type
+                                    == DrawLineType::Line(Some(Color::Srgba(Srgba::RED))))
+                    );
+                } else {
+                    assert_eq!(expected[index].start, line_data.start);
+                    assert_eq!(expected[index].end, line_data.end);
+                    assert_eq!(expected[index].color, line_data.color);
+                    assert_eq!(expected[index].line_type, line_data.line_type);
                 }
             }
         };
@@ -383,7 +393,7 @@ mod tests {
     }
 
     #[test]
-    fn test_merger_merge_mix() {
+    fn test_merge_mix() {
         let mut app = App::new();
         let two_edges_merged_system = |mut merger: AsymmetricalStraightEdgeMerger| {
             let mut nav_viz_map = NavVizMap::default();
@@ -425,8 +435,8 @@ mod tests {
                     color: Color::Srgba(Srgba::GREEN),
                 },
                 DrawLineData {
-                    start: Vec2::new(2., 0.),
-                    end: Vec2::new(3., 0.),
+                    start: Vec2::new(3., 0.),
+                    end: Vec2::new(2., 0.),
                     line_type: DrawLineType::Line(Some(Color::Srgba(Srgba::GREEN))),
                     color: Color::Srgba(Srgba::RED),
                 },
@@ -441,7 +451,7 @@ mod tests {
                 e1,
                 NavVizPosData {
                     aabb_size: Vec2::splat(1.),
-                    transformation: Isometry2d::IDENTITY,
+                    transformation: Isometry2d::from_translation(Vec2::new(0., -1.)),
                     obb_size: Vec2::splat(1.),
                 },
             );
@@ -449,7 +459,7 @@ mod tests {
                 e2,
                 NavVizPosData {
                     aabb_size: Vec2::splat(1.),
-                    transformation: Isometry2d::from_translation(Vec2::new(5., 0.)),
+                    transformation: Isometry2d::from_translation(Vec2::new(5., -1.)),
                     obb_size: Vec2::splat(1.),
                 },
             );
@@ -457,7 +467,7 @@ mod tests {
                 e3,
                 NavVizPosData {
                     aabb_size: Vec2::splat(1.),
-                    transformation: Isometry2d::from_translation(Vec2::new(0., 5.)),
+                    transformation: Isometry2d::from_translation(Vec2::new(0., 4.)),
                     obb_size: Vec2::splat(1.),
                 },
             );
@@ -473,9 +483,10 @@ mod tests {
                     line_type: DrawLineType::Arrow,
                     color: Color::Srgba(Srgba::new(0.5, 0.5, 0., 1.0)),
                 },
+                // the test might fail because this middle entry could have start/end switched?
                 DrawLineData {
-                    start: Vec2::new(2., 0.),
-                    end: Vec2::new(3., 0.),
+                    start: Vec2::new(3., 0.),
+                    end: Vec2::new(2., 0.),
                     line_type: DrawLineType::Line(None),
                     color: Color::Srgba(Srgba::new(0.5, 0.5, 0., 1.0)),
                 },
@@ -490,11 +501,115 @@ mod tests {
                 .line_data_to_draw
                 .sort_by(|d1, d2| d1.end.x.partial_cmp(&d2.end.x).expect("Not using NaN"));
             for (index, line_data) in merger.line_data_to_draw.iter().enumerate() {
-                assert_eq!(expected[index].start, line_data.start);
-                assert_eq!(expected[index].end, line_data.end);
+                if index == 1 {
+                    let start_is_e2 = line_data.start == Vec2::new(3., 0.);
+                    assert!(line_data.start == Vec2::new(2., 0.) || start_is_e2);
+                    assert!(
+                        line_data.end == Vec2::new(3., 0.)
+                            || (start_is_e2 && line_data.end == Vec2::new(2., 0.))
+                    );
+                } else {
+                    assert_eq!(expected[index].start, line_data.start);
+                    assert_eq!(expected[index].end, line_data.end);
+                }
                 assert_eq!(expected[index].line_type, line_data.line_type);
                 assert_eq!(expected[index].color, line_data.color);
             }
+        };
+
+        assert!(
+            app.world_mut()
+                .run_system_cached(two_edges_merged_system)
+                .is_ok()
+        )
+    }
+
+    #[test]
+    fn test_overlap() {
+        let mut app = App::new();
+        let two_edges_merged_system = |mut merger: AsymmetricalStraightEdgeMerger| {
+            let mut nav_viz_map = NavVizMap::default();
+            let mut config = AutoNavVizGizmoConfigGroup::default();
+            config.arrow_tip_length = 2.;
+            config.draw_mode =
+                AutoNavVizDrawMode::EnabledForAll(SymmetricalEdgeSettings::OverlappingSingleArrows);
+            let e1 = Entity::from_raw_u32(1).unwrap();
+            let e2 = Entity::from_raw_u32(2).unwrap();
+            let e3 = Entity::from_raw_u32(3).unwrap();
+            let e1_to_e2_meta =
+                NavVizDrawMetaData::new(e1, CompassOctant::NorthEast, e2, CompassOctant::NorthWest);
+            let e1_to_e2 = [
+                DrawLineData {
+                    start: Vec2::new(2., 0.),
+                    end: Vec2::new(1., 0.),
+                    line_type: DrawLineType::Line(None),
+                    color: Color::Srgba(Srgba::RED),
+                },
+                DrawLineData {
+                    start: Vec2::new(2., 0.),
+                    end: Vec2::new(3., 0.),
+                    line_type: DrawLineType::Line(Some(Color::Srgba(Srgba::GREEN))),
+                    color: Color::Srgba(Srgba::RED),
+                },
+                DrawLineData {
+                    start: Vec2::new(3., 0.),
+                    end: Vec2::new(4., 0.),
+                    line_type: DrawLineType::Arrow,
+                    color: Color::Srgba(Srgba::GREEN),
+                },
+            ];
+            let e2_to_e1_meta =
+                NavVizDrawMetaData::new(e2, CompassOctant::NorthWest, e1, CompassOctant::NorthEast);
+            let e2_to_e1 = [
+                DrawLineData {
+                    start: Vec2::new(3., 0.),
+                    end: Vec2::new(4., 0.),
+                    line_type: DrawLineType::Line(None),
+                    color: Color::Srgba(Srgba::GREEN),
+                },
+                DrawLineData {
+                    start: Vec2::new(3., 0.),
+                    end: Vec2::new(2., 0.),
+                    line_type: DrawLineType::Line(Some(Color::Srgba(Srgba::GREEN))),
+                    color: Color::Srgba(Srgba::RED),
+                },
+                DrawLineData {
+                    start: Vec2::new(2., 0.),
+                    end: Vec2::new(1., 0.),
+                    line_type: DrawLineType::Arrow,
+                    color: Color::Srgba(Srgba::RED),
+                },
+            ];
+            nav_viz_map.entity_viz_pos_data.insert(
+                e1,
+                NavVizPosData {
+                    aabb_size: Vec2::splat(1.),
+                    transformation: Isometry2d::from_translation(Vec2::new(0., -1.)),
+                    obb_size: Vec2::splat(1.),
+                },
+            );
+            nav_viz_map.entity_viz_pos_data.insert(
+                e2,
+                NavVizPosData {
+                    aabb_size: Vec2::splat(1.),
+                    transformation: Isometry2d::from_translation(Vec2::new(5., -1.)),
+                    obb_size: Vec2::splat(1.),
+                },
+            );
+            nav_viz_map.entity_viz_pos_data.insert(
+                e3,
+                NavVizPosData {
+                    aabb_size: Vec2::splat(1.),
+                    transformation: Isometry2d::from_translation(Vec2::new(0., 4.)),
+                    obb_size: Vec2::splat(1.),
+                },
+            );
+
+            merger.clear();
+            merger.add_straight_edge(e1_to_e2_meta, e1_to_e2);
+            merger.add_straight_edge(e2_to_e1_meta, e2_to_e1);
+            merger.do_merge(&nav_viz_map, &config);
+            assert_eq!(merger.line_data_to_draw.len(), 6);
         };
 
         assert!(
