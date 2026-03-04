@@ -114,6 +114,93 @@ pub enum DrawLineType {
     DoubleEndedArrow,
 }
 
+/// A trait that Draw types share so that they can be visualized.
+trait Visualizable {
+    /// Draws the visualization for `&self` via [`Gizmos`].
+    fn visualize(
+        &self,
+        gizmos: &mut Gizmos<AutoNavVizGizmoConfigGroup>,
+        config: &AutoNavVizGizmoConfigGroup,
+    );
+}
+
+impl Visualizable for DrawLineData {
+    fn visualize(
+        &self,
+        gizmos: &mut Gizmos<AutoNavVizGizmoConfigGroup>,
+        config: &AutoNavVizGizmoConfigGroup,
+    ) {
+        match self.line_type {
+            DrawLineType::Line(maybe_color) => {
+                if let Some(end_color) = maybe_color {
+                    gizmos.line_gradient_2d(self.start, self.end, self.color, end_color);
+                } else {
+                    gizmos.line_2d(self.start, self.end, self.color);
+                }
+            }
+            DrawLineType::Arrow => {
+                gizmos
+                    .arrow_2d(self.start, self.end, self.color)
+                    .with_tip_length(config.arrow_tip_length);
+            }
+            DrawLineType::DoubleEndedArrow => {
+                gizmos
+                    .arrow_2d(self.start, self.end, self.color)
+                    .with_tip_length(config.arrow_tip_length)
+                    .with_double_end();
+            }
+        }
+    }
+}
+
+impl Visualizable for DrawArcData {
+    fn visualize(
+        &self,
+        gizmos: &mut Gizmos<AutoNavVizGizmoConfigGroup>,
+        _config: &AutoNavVizGizmoConfigGroup,
+    ) {
+        gizmos.arc_2d(self.isometry, self.arc_angle, self.radius, self.color);
+    }
+}
+
+impl Visualizable for DrawLoopedLineData {
+    fn visualize(
+        &self,
+        gizmos: &mut Gizmos<AutoNavVizGizmoConfigGroup>,
+        config: &AutoNavVizGizmoConfigGroup,
+    ) {
+        self.start_arc.visualize(gizmos, config);
+        self.end_arc.visualize(gizmos, config);
+        for line_data in self.line_data {
+            line_data.visualize(gizmos, config);
+        }
+    }
+}
+
+impl Visualizable for NavVizDrawData {
+    fn visualize(
+        &self,
+        gizmos: &mut Gizmos<AutoNavVizGizmoConfigGroup>,
+        config: &AutoNavVizGizmoConfigGroup,
+    ) {
+        match self {
+            NavVizDrawData::Looped(loop_around_data) => {
+                loop_around_data.visualize(gizmos, config);
+            }
+            NavVizDrawData::ShortStraight(line_data) => {
+                for line_data in line_data {
+                    line_data.visualize(gizmos, config);
+                }
+            }
+            NavVizDrawData::Straight(line_data) => {
+                for line_data in line_data {
+                    line_data.visualize(gizmos, config);
+                }
+            }
+        }
+    }
+}
+
 /// The system that draws the visualizations of the auto navigation
 /// system. It uses gizmos to draw arrows between entities.
 pub fn draw_nav_viz(
@@ -195,39 +282,14 @@ pub fn draw_nav_viz(
                 nav_edge_is_symmetrical,
                 config,
             );
-            match draw_data {
-                NavVizDrawData::Looped(loop_around_data) => {
-                    gizmos.arc_2d(
-                        loop_around_data.start_arc.isometry,
-                        loop_around_data.start_arc.arc_angle,
-                        loop_around_data.start_arc.radius,
-                        loop_around_data.start_arc.color,
-                    );
-                    gizmos.arc_2d(
-                        loop_around_data.end_arc.isometry,
-                        loop_around_data.end_arc.arc_angle,
-                        loop_around_data.end_arc.radius,
-                        loop_around_data.end_arc.color,
-                    );
-                    for line_data in loop_around_data.line_data {
-                        draw_line(&mut gizmos, config, &line_data);
-                    }
-                }
-                NavVizDrawData::ShortStraight(line_data) => {
-                    for line_data in line_data {
-                        draw_line(&mut gizmos, config, &line_data);
-                    }
-                }
-                NavVizDrawData::Straight(line_data) => {
-                    if !nav_edge_is_symmetrical {
-                        // Add to asymm_straight_edge_merger for further processing before drawing.
-                        asymm_straight_edge_merger.add_straight_edge(meta_data, line_data);
-                    } else {
-                        for line_data in line_data {
-                            draw_line(&mut gizmos, config, &line_data);
-                        }
-                    }
-                }
+
+            if let NavVizDrawData::Straight(line_data) = draw_data
+                && !nav_edge_is_symmetrical
+            {
+                // Add to asymm_straight_edge_merger for further processing before drawing.
+                asymm_straight_edge_merger.add_straight_edge(meta_data, line_data);
+            } else {
+                draw_data.visualize(&mut gizmos, config);
             }
         }
         processed_entities.insert(*entity);
@@ -237,7 +299,7 @@ pub fn draw_nav_viz(
     // symmetrical when drawn are also merged.
     asymm_straight_edge_merger.do_merge(&nav_viz_map, config);
     for line_data in asymm_straight_edge_merger.get_line_data().iter() {
-        draw_line(&mut gizmos, config, line_data);
+        line_data.visualize(&mut gizmos, config);
     }
 }
 
@@ -503,34 +565,6 @@ fn get_closest_point_in_dir(
         }
     }
     (closest_point, closest_dir)
-}
-
-/// Given a [`DrawLineData`], draws a line or arrow via gizmos.
-fn draw_line(
-    gizmos: &mut Gizmos<AutoNavVizGizmoConfigGroup>,
-    config: &AutoNavVizGizmoConfigGroup,
-    line_data: &DrawLineData,
-) {
-    match line_data.line_type {
-        DrawLineType::Line(maybe_color) => {
-            if let Some(end_color) = maybe_color {
-                gizmos.line_gradient_2d(line_data.start, line_data.end, line_data.color, end_color);
-            } else {
-                gizmos.line_2d(line_data.start, line_data.end, line_data.color);
-            }
-        }
-        DrawLineType::Arrow => {
-            gizmos
-                .arrow_2d(line_data.start, line_data.end, line_data.color)
-                .with_tip_length(config.arrow_tip_length);
-        }
-        DrawLineType::DoubleEndedArrow => {
-            gizmos
-                .arrow_2d(line_data.start, line_data.end, line_data.color)
-                .with_tip_length(config.arrow_tip_length)
-                .with_double_end();
-        }
-    }
 }
 
 #[cfg(test)]
