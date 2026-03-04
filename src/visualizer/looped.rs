@@ -34,7 +34,7 @@ pub(crate) fn new_looped_draw_data(
         DrawLineType::Line(None)
     };
     let (start_line, start_arc, line_start) = calculate_arc(
-        (start_point, from_pos_data, start_point_dir),
+        (start_point, from_pos_data.obb_size, start_point_dir),
         get_angle_from_pi_rotation(start_point, start_point_dir, end_point),
         false,
         override_color.unwrap_or(from_color),
@@ -44,7 +44,7 @@ pub(crate) fn new_looped_draw_data(
 
     // The ending arc should always end in an arrow
     let (end_line, end_arc, line_end) = calculate_arc(
-        (end_point, to_pos_data, end_point_dir),
+        (end_point, to_pos_data.obb_size, end_point_dir),
         get_angle_from_pi_rotation(end_point, end_point_dir, start_point),
         true,
         override_color.unwrap_or(to_color),
@@ -96,7 +96,7 @@ pub(crate) fn new_looped_draw_data(
 /// For ending arcs, the arc should be drawn mirrored (`mirror` set to true) for aesthetics.
 /// line_type should also be set to [`DrawLineType::Arrow`].
 fn calculate_arc(
-    (point, pos_data, dir_of_point): (Vec2, &NavVizPosData, CompassOctant),
+    (point, obb_size, dir_of_point): (Vec2, Vec2, CompassOctant),
     angle_from_pi_radians: f32,
     mirror: bool,
     color: Color,
@@ -122,7 +122,7 @@ fn calculate_arc(
     // 6 arcs per side to account for these permutations.
     // The radius length is 1/2 the arc diameter. So, the radius must be
     // at most 1/12 the length of a side.
-    let radius = pos_data.obb_size / 12.;
+    let radius = obb_size / 12.;
 
     // The mirror side's arc_angle should increase as the normal side's decreases,
     // and vice versa (as the endpoints become heavily misaligned, one arc angle
