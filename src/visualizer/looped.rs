@@ -5,8 +5,11 @@ use bevy::prelude::*;
 
 use crate::{
     AutoNavVizGizmoConfigGroup, DrawArcData, DrawLineData, DrawLineType, DrawLoopedLineData,
-    NavVizDrawData, NavVizPosData,
+    NavVizDrawData,
 };
+
+// TODO fix logic determining size of arrows and nudges.
+// It fails with rotated scaled nodes.
 
 /// Returns a [`NavVizDrawData`] representing a [`NavVizDrawData::Looped`], a navigation edge
 /// that loops around its start and end.
@@ -16,13 +19,8 @@ use crate::{
 /// if `override_color` is `Some(Color)`, the draw data will be that color.
 /// If `None`, it will be a gradient between `from_color` and `to_color`.
 pub(crate) fn new_looped_draw_data(
-    (start_point, from_pos_data, start_point_dir, from_color): (
-        Vec2,
-        &NavVizPosData,
-        CompassOctant,
-        Color,
-    ),
-    (end_point, to_pos_data, end_point_dir, to_color): (Vec2, &NavVizPosData, CompassOctant, Color),
+    (start_point, start_point_dir, from_color): (Vec2, CompassOctant, Color),
+    (end_point, end_point_dir, to_color): (Vec2, CompassOctant, Color),
     start_line_is_arrow: bool,
     override_color: Option<Color>,
     config: &AutoNavVizGizmoConfigGroup,
@@ -34,7 +32,8 @@ pub(crate) fn new_looped_draw_data(
         DrawLineType::Line(None)
     };
     let (start_line, start_arc, line_start) = calculate_arc(
-        (start_point, from_pos_data.obb_size, start_point_dir),
+        start_point,
+        start_point_dir,
         get_angle_from_pi_rotation(start_point, start_point_dir, end_point),
         false,
         override_color.unwrap_or(from_color),
@@ -44,7 +43,8 @@ pub(crate) fn new_looped_draw_data(
 
     // The ending arc should always end in an arrow
     let (end_line, end_arc, line_end) = calculate_arc(
-        (end_point, to_pos_data.obb_size, end_point_dir),
+        end_point,
+        end_point_dir,
         get_angle_from_pi_rotation(end_point, end_point_dir, start_point),
         true,
         override_color.unwrap_or(to_color),
@@ -71,15 +71,6 @@ pub(crate) fn new_looped_draw_data(
     })
 }
 
-/// Ensuring the arc radius is some fraction of size ensures that
-/// multiple consecutive looping edges are spaced out visually when
-/// approaching near entities. Along a side, we must accommodate at most
-/// 3 drawn arcs. Since the arcs can be mirrored, we should accommodate
-/// 6 arcs per side to account for these permutations.
-/// The radius length is 1/2 the arc diameter. So, the radius must be
-/// at most 1/12 the length of a side.
-const RADIUS_LOCAL_SIZE_PROPORTION: f32 = 1. / 12.;
-
 /// Helper function for creating [`DrawLoopedLineData`](crate::DrawLoopedLineData).
 /// This returns data for drawing the line/arrow that loops out from/
 /// in to `point`, the semi-circle arc connected to this line/arrow, and the
@@ -105,7 +96,8 @@ const RADIUS_LOCAL_SIZE_PROPORTION: f32 = 1. / 12.;
 /// For ending arcs, the arc should be drawn mirrored (`mirror` set to true) for aesthetics.
 /// line_type should also be set to [`DrawLineType::Arrow`].
 fn calculate_arc(
-    (point, local_size, dir_of_point): (Vec2, Vec2, CompassOctant),
+    point: Vec2,
+    dir_of_point: CompassOctant,
     angle_from_pi_radians: f32,
     mirror: bool,
     color: Color,
@@ -124,7 +116,7 @@ fn calculate_arc(
         color,
         line_type,
     };
-    let radius = local_size * RADIUS_LOCAL_SIZE_PROPORTION;
+    let radius = config.get_arc_radius();
 
     // The mirror side's arc_angle should increase as the normal side's decreases,
     // and vice versa (as the endpoints become heavily misaligned, one arc angle
@@ -411,6 +403,23 @@ mod tests {
         );
     }
 
+    fn assert_eq_vec2(left: Vec2, right: Vec2) {
+        let difference = left - right;
+
+        assert!(
+            ops::abs(difference.x) <= 1e-6,
+            "left: {}\n right: {}",
+            left,
+            right
+        );
+        assert!(
+            ops::abs(difference.y) <= 1e-6,
+            "left: {}\n right: {}",
+            left,
+            right
+        );
+    }
+
     #[test]
     fn test_get_angle_from_pi_rotation() {
         let angle = get_angle_from_pi_rotation(
@@ -456,7 +465,8 @@ mod tests {
 
         // Straightforward Test
         let (line, arc, endpoint) = calculate_arc(
-            (Vec2::ZERO, Vec2::new(12., 18.), CompassOctant::North),
+            Vec2::ZERO,
+            CompassOctant::North,
             0.,
             false,
             Color::Srgba(Srgba::RED),
@@ -470,7 +480,7 @@ mod tests {
         assert_eq!(line.color, Color::Srgba(Srgba::RED));
         assert_eq!(line.line_type, DrawLineType::Arrow);
 
-        let expected_radius = 1.; // 12. * RADIUS_LOCAL_SIZE_PROPORTION
+        let expected_radius = 5. * 0.75;
         assert_eq!(
             arc.isometry.translation,
             expected_arc_start + Vec2::new(-expected_radius, 0.)
@@ -480,14 +490,15 @@ mod tests {
         assert_eq!(arc.arc_angle, PI);
         assert_eq!(arc.color, Color::Srgba(Srgba::RED));
 
-        assert_eq!(
+        assert_eq_vec2(
             endpoint,
-            expected_arc_start + 2. * Vec2::new(-expected_radius, 0.)
+            expected_arc_start + 2. * Vec2::new(-expected_radius, 0.),
         );
 
         // Mirrored test with angle
         let (line, arc, endpoint) = calculate_arc(
-            (Vec2::ZERO, Vec2::new(12., 18.), CompassOctant::East),
+            Vec2::ZERO,
+            CompassOctant::East,
             FRAC_PI_4,
             true,
             Color::Srgba(Srgba::RED),
@@ -501,7 +512,7 @@ mod tests {
         assert_eq!(line.color, Color::Srgba(Srgba::RED));
         assert_eq!(line.line_type, DrawLineType::Arrow);
 
-        let expected_radius = 1.5; // 18. * RADIUS_LOCAL_SIZE_PROPORTION
+        let expected_radius = 5. * 0.75;
         assert_eq!(
             arc.isometry.translation,
             expected_arc_start + Vec2::new(0., -expected_radius)
@@ -514,12 +525,12 @@ mod tests {
         assert_eq!(arc.color, Color::Srgba(Srgba::RED));
 
         // translate to the center of the arc and then add the relative point along the arc
-        assert_eq!(
+        assert_eq_vec2(
             endpoint,
             expected_arc_start
                 + Vec2::new(0., -expected_radius)
                 + Rot2::radians(PI + FRAC_PI_2)
-                    * (expected_radius * Vec2::new(1. / SQRT_2, 1. / SQRT_2))
+                    * (expected_radius * Vec2::new(1. / SQRT_2, 1. / SQRT_2)),
         );
     }
 }

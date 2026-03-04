@@ -211,6 +211,9 @@ pub struct AutoNavVizGizmoConfigGroup {
     pub color_mode: AutoNavVizColorMode,
 
     /// Determines the arrow tip length for directional arrow in world coordinates.
+    /// This also determines the amount of nudge used with
+    /// [`SymmetricalEdgeSettings::SpacingBetweenSingleArrows`] and the radius
+    /// of the pair of arcs drawn for looped edges.
     pub arrow_tip_length: f32,
 
     /// A color representing one of the eight [`CompassOctant`] directions
@@ -349,5 +352,18 @@ impl AutoNavVizGizmoConfigGroup {
             }
             AutoNavVizColorMode::DirectionalOnly => color,
         }
+    }
+
+    /// Returns the nudge units used when the Draw Mode is set to
+    /// [`AutoNavVizDrawMode::EnabledForAll`] with symmetrical edge settings
+    /// [`SymmetricalEdgeSettings::SpacingBetweenSingleArrows`]. The value returned
+    /// is half of the `arrow_tip_length`.
+    pub fn get_nudge_units(&self) -> Vec2 {
+        Vec2::splat(self.arrow_tip_length / 2.)
+    }
+
+    /// Returns the arc radius for looped edges: 0.75 the value of `arrow_tip_length`.
+    pub fn get_arc_radius(&self) -> Vec2 {
+        Vec2::splat(self.arrow_tip_length * 0.75)
     }
 }

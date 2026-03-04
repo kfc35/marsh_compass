@@ -114,11 +114,9 @@ impl<'s> AsymmetricalStraightEdgeMerger<'s> {
                             .expect("This succeeded when first making these edges");
 
                         let (start_local_nudge, end_local_nudge) = crate::get_local_nudge(
-                            from_pos_data.obb_size,
+                            config.get_nudge_units(),
                             meta_data.source_direction,
-                            to_pos_data.obb_size,
                             meta_data.destination_direction,
-                            symm_edge_settings,
                         );
 
                         edge[0].start =
