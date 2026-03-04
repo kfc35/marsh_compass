@@ -222,7 +222,7 @@ fn calculate_arc(
                 }
                 // The arc's center is shifted west and north (mirrored: east and south).
                 // We use arc_translation.x here for both to ensure the math works out.
-                // This corresponds to a radius of length arc_translation.x.abs(), aka radius.x
+                // This corresponds to a radius of length ops::abs(arc_translation.x), aka radius.x
                 let isometry_translation = Vec2::new(
                     line_start.x - arc_translation.x / SQRT_2,
                     line_start.y + arc_translation.x / SQRT_2,
@@ -368,8 +368,12 @@ fn calculate_arc(
 /// This is eventually used to figure out the curvature of the arc that is created near `start`.
 /// The signed dot product will be used to adjust how much of the semi-circle arc (arc_angle = PI)
 /// is drawn.
-fn get_angle_from_pi_rotation(start: Vec2, dir_from_start: CompassOctant, end: Vec2) -> f32 {
-    let pi_rotation = dir_from_start.opposite();
+fn get_angle_from_pi_rotation(
+    start: Vec2,
+    dir_from_start_to_rotate: CompassOctant,
+    end: Vec2,
+) -> f32 {
+    let pi_rotation = dir_from_start_to_rotate.opposite();
     let start_to_end_dir = (end - start).normalize();
     let mut radians_from_pi_arc = ops::acos(
         Into::<Dir2>::into(pi_rotation)
@@ -387,4 +391,76 @@ fn get_angle_from_pi_rotation(start: Vec2, dir_from_start: CompassOctant, end: V
     }
 
     radians_from_pi_arc
+}
+
+// TODO test for get_angle_from_pi_rotation, calculate_arc
+#[cfg(test)]
+mod tests {
+    use std::f32::consts::FRAC_PI_2;
+
+    use super::*;
+
+    fn assert_eq_vec2(left: Vec2, right: Vec2) {
+        let difference = left - right;
+        assert!(
+            ops::abs(difference.x) <= 1e-6,
+            "left: {}\n right: {}",
+            left,
+            right
+        );
+        assert!(
+            ops::abs(difference.y) <= 1e-6,
+            "left: {}\n right: {}",
+            left,
+            right
+        );
+    }
+
+    fn assert_eq_f32(left: f32, right: f32) {
+        let difference = left - right;
+        assert!(
+            ops::abs(difference) <= 1e-6,
+            "left: {}\n right: {}",
+            left,
+            right
+        );
+    }
+
+    #[test]
+    fn test_get_angle_from_pi_rotation() {
+        let angle = get_angle_from_pi_rotation(
+            Vec2::ZERO,
+            CompassOctant::North,
+            Into::<Dir2>::into(CompassOctant::East).as_vec2(),
+        );
+        assert_eq_f32(angle, FRAC_PI_2);
+
+        let angle = get_angle_from_pi_rotation(
+            Vec2::ZERO,
+            CompassOctant::North,
+            Into::<Dir2>::into(CompassOctant::SouthEast).as_vec2(),
+        );
+        assert_eq_f32(angle, FRAC_PI_4);
+
+        let angle = get_angle_from_pi_rotation(
+            Vec2::ZERO,
+            CompassOctant::North,
+            Into::<Dir2>::into(CompassOctant::South).as_vec2(),
+        );
+        assert_eq_f32(angle, 0.);
+
+        let angle = get_angle_from_pi_rotation(
+            Vec2::ZERO,
+            CompassOctant::North,
+            Into::<Dir2>::into(CompassOctant::SouthWest).as_vec2(),
+        );
+        assert_eq_f32(angle, -FRAC_PI_4);
+
+        let angle = get_angle_from_pi_rotation(
+            Vec2::ZERO,
+            CompassOctant::North,
+            Into::<Dir2>::into(CompassOctant::West).as_vec2(),
+        );
+        assert_eq_f32(angle, -FRAC_PI_2);
+    }
 }
