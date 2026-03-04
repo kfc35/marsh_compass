@@ -35,20 +35,20 @@ pub(crate) fn new_looped_draw_data(
     };
     let (start_line, start_arc, line_start) = calculate_arc(
         (start_point, from_pos_data, start_point_dir),
+        get_angle_from_pi_rotation(start_point, start_point_dir, end_point),
         false,
         override_color.unwrap_or(from_color),
         start_line_line_type,
-        get_angle_from_pi_rotation(start_point, start_point_dir, end_point),
         config,
     );
 
     // The ending arc should always end in an arrow
     let (end_line, end_arc, line_end) = calculate_arc(
         (end_point, to_pos_data, end_point_dir),
+        get_angle_from_pi_rotation(end_point, end_point_dir, start_point),
         true,
         override_color.unwrap_or(to_color),
         DrawLineType::Arrow,
-        get_angle_from_pi_rotation(end_point, end_point_dir, start_point),
         config,
     );
 
@@ -79,6 +79,9 @@ pub(crate) fn new_looped_draw_data(
 ///
 /// `point` lies in the direction of `dir_of_point` on the rectangle.
 /// The arc and the line/arrow are drawn with the provided `color`.
+/// `angle_from_pi_radians` is the deviation from a semi-circle arc
+/// (arc with arc_length PI), for when the destination point is not directly
+/// opposite the given `point`.
 ///
 /// Concretely, this function returns:
 /// - [`DrawLineData`] for the line/arrow (determined by [`DrawLineType`]) between the given
@@ -94,10 +97,10 @@ pub(crate) fn new_looped_draw_data(
 /// line_type should also be set to [`DrawLineType::Arrow`].
 pub(crate) fn calculate_arc(
     (point, pos_data, dir_of_point): (Vec2, &NavVizPosData, CompassOctant),
+    angle_from_pi_radians: f32,
     mirror: bool,
     color: Color,
     line_type: DrawLineType,
-    angle_from_pi_radians: f32,
     config: &AutoNavVizGizmoConfigGroup,
 ) -> (DrawLineData, DrawArcData, Vec2) {
     // line_start is also the starting point of the arc.
