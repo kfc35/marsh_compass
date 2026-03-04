@@ -58,6 +58,20 @@ impl NavVizDrawMetaData {
             destination_direction: self.source_direction,
         }
     }
+
+    pub fn new(
+        source_entity: Entity,
+        source_direction: CompassOctant,
+        destination_entity: Entity,
+        destination_direction: CompassOctant,
+    ) -> Self {
+        NavVizDrawMetaData {
+            source_entity,
+            source_direction,
+            destination_entity,
+            destination_direction,
+        }
+    }
 }
 
 /// A struct containing multiple draw elements that, when composed,
