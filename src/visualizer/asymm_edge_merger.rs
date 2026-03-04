@@ -530,7 +530,6 @@ mod tests {
         let two_edges_merged_system = |mut merger: AsymmetricalStraightEdgeMerger| {
             let mut nav_viz_map = NavVizMap::default();
             let mut config = AutoNavVizGizmoConfigGroup::default();
-            config.arrow_tip_length = 2.;
             config.draw_mode =
                 AutoNavVizDrawMode::EnabledForAll(SymmetricalEdgeSettings::OverlappingSingleArrows);
             let e1 = Entity::from_raw_u32(1).unwrap();
@@ -610,6 +609,162 @@ mod tests {
             merger.add_straight_edge(e2_to_e1_meta, e2_to_e1);
             merger.do_merge(&nav_viz_map, &config);
             assert_eq!(merger.line_data_to_draw.len(), 6);
+        };
+
+        assert!(
+            app.world_mut()
+                .run_system_cached(two_edges_merged_system)
+                .is_ok()
+        )
+    }
+
+    #[test]
+    fn test_spacing() {
+        let mut app = App::new();
+        let two_edges_merged_system = |mut merger: AsymmetricalStraightEdgeMerger| {
+            let mut nav_viz_map = NavVizMap::default();
+            let mut config = AutoNavVizGizmoConfigGroup::default();
+            config.arrow_tip_length = 2.;
+            config.draw_mode = AutoNavVizDrawMode::EnabledForAll(
+                SymmetricalEdgeSettings::SpacingBetweenSingleArrows,
+            );
+            let e1 = Entity::from_raw_u32(1).unwrap();
+            let e2 = Entity::from_raw_u32(2).unwrap();
+            let e3 = Entity::from_raw_u32(3).unwrap();
+            let e1_to_e2_meta =
+                NavVizDrawMetaData::new(e1, CompassOctant::NorthEast, e2, CompassOctant::NorthWest);
+            let e1_to_e2 = [
+                DrawLineData {
+                    start: Vec2::new(2., 0.),
+                    end: Vec2::new(1., 0.),
+                    line_type: DrawLineType::Line(None),
+                    color: Color::Srgba(Srgba::RED),
+                },
+                DrawLineData {
+                    start: Vec2::new(2., 0.),
+                    end: Vec2::new(3., 0.),
+                    line_type: DrawLineType::Line(Some(Color::Srgba(Srgba::GREEN))),
+                    color: Color::Srgba(Srgba::RED),
+                },
+                DrawLineData {
+                    start: Vec2::new(3., 0.),
+                    end: Vec2::new(4., 0.),
+                    line_type: DrawLineType::Arrow,
+                    color: Color::Srgba(Srgba::GREEN),
+                },
+            ];
+            let e2_to_e1_meta =
+                NavVizDrawMetaData::new(e2, CompassOctant::NorthWest, e1, CompassOctant::NorthEast);
+            let e2_to_e1 = [
+                DrawLineData {
+                    start: Vec2::new(3., 0.),
+                    end: Vec2::new(4., 0.),
+                    line_type: DrawLineType::Line(None),
+                    color: Color::Srgba(Srgba::GREEN),
+                },
+                DrawLineData {
+                    start: Vec2::new(3., 0.),
+                    end: Vec2::new(2., 0.),
+                    line_type: DrawLineType::Line(Some(Color::Srgba(Srgba::GREEN))),
+                    color: Color::Srgba(Srgba::RED),
+                },
+                DrawLineData {
+                    start: Vec2::new(2., 0.),
+                    end: Vec2::new(1., 0.),
+                    line_type: DrawLineType::Arrow,
+                    color: Color::Srgba(Srgba::RED),
+                },
+            ];
+            nav_viz_map.entity_viz_pos_data.insert(
+                e1,
+                NavVizPosData {
+                    aabb_size: Vec2::splat(1.),
+                    transformation: Isometry2d::from_translation(Vec2::new(0., -1.)),
+                    obb_size: Vec2::splat(1.),
+                },
+            );
+            nav_viz_map.entity_viz_pos_data.insert(
+                e2,
+                NavVizPosData {
+                    aabb_size: Vec2::splat(1.),
+                    transformation: Isometry2d::from_translation(Vec2::new(5., -1.)),
+                    obb_size: Vec2::splat(1.),
+                },
+            );
+            nav_viz_map.entity_viz_pos_data.insert(
+                e3,
+                NavVizPosData {
+                    aabb_size: Vec2::splat(1.),
+                    transformation: Isometry2d::from_translation(Vec2::new(0., 4.)),
+                    obb_size: Vec2::splat(1.),
+                },
+            );
+
+            merger.clear();
+            merger.add_straight_edge(e1_to_e2_meta, e1_to_e2);
+            merger.add_straight_edge(e2_to_e1_meta, e2_to_e1);
+            merger.do_merge(&nav_viz_map, &config);
+            let mut expected = [
+                // e1 to e2
+                DrawLineData {
+                    start: Vec2::new(1., 0.), // nudged west
+                    end: Vec2::new(0., 0.),   // nudgest west
+                    line_type: DrawLineType::Line(None),
+                    color: Color::Srgba(Srgba::RED),
+                },
+                DrawLineData {
+                    start: Vec2::new(1., 0.), // nudged west
+                    end: Vec2::new(4., 0.),   // nudged east
+                    line_type: DrawLineType::Line(Some(Color::Srgba(Srgba::GREEN))),
+                    color: Color::Srgba(Srgba::RED),
+                },
+                DrawLineData {
+                    start: Vec2::new(4., 0.), // nudged east
+                    end: Vec2::new(5., 0.),   // nudged east
+                    line_type: DrawLineType::Arrow,
+                    color: Color::Srgba(Srgba::GREEN),
+                },
+                // e2 to e1
+                DrawLineData {
+                    start: Vec2::new(3., -1.), // nudged south
+                    end: Vec2::new(4., -1.),   // nudged south
+                    line_type: DrawLineType::Line(None),
+                    color: Color::Srgba(Srgba::GREEN),
+                },
+                DrawLineData {
+                    start: Vec2::new(3., -1.), // nudged south
+                    end: Vec2::new(2., -1.),   // nudged south
+                    line_type: DrawLineType::Line(Some(Color::Srgba(Srgba::GREEN))),
+                    color: Color::Srgba(Srgba::RED),
+                },
+                DrawLineData {
+                    start: Vec2::new(2., -1.), // nudged south
+                    end: Vec2::new(1., -1.),   // nudged south
+                    line_type: DrawLineType::Arrow,
+                    color: Color::Srgba(Srgba::RED),
+                },
+            ];
+            merger.line_data_to_draw.sort_by(|d1, d2| {
+                d1.end
+                    .x
+                    .partial_cmp(&d2.end.x)
+                    .expect("Not using NaN")
+                    .then(d1.end.y.partial_cmp(&d2.end.y).expect("Not using NaN"))
+            });
+            expected.sort_by(|d1, d2| {
+                d1.end
+                    .x
+                    .partial_cmp(&d2.end.x)
+                    .expect("Not using NaN")
+                    .then(d1.end.y.partial_cmp(&d2.end.y).expect("Not using NaN"))
+            });
+            for (index, line_data) in merger.line_data_to_draw.iter().enumerate() {
+                assert_eq!(expected[index].start, line_data.start);
+                assert_eq!(expected[index].end, line_data.end);
+
+                assert_eq!(expected[index].line_type, line_data.line_type);
+                assert_eq!(expected[index].color, line_data.color);
+            }
         };
 
         assert!(
