@@ -71,6 +71,15 @@ pub(crate) fn new_looped_draw_data(
     })
 }
 
+/// Ensuring the arc radius is some fraction of size ensures that
+/// multiple consecutive looping edges are spaced out visually when
+/// approaching near entities. Along a side, we must accommodate at most
+/// 3 drawn arcs. Since the arcs can be mirrored, we should accommodate
+/// 6 arcs per side to account for these permutations.
+/// The radius length is 1/2 the arc diameter. So, the radius must be
+/// at most 1/12 the length of a side.
+const RADIUS_LOCAL_SIZE_PROPORTION: f32 = 1. / 12.;
+
 /// Helper function for creating [`DrawLoopedLineData`](crate::DrawLoopedLineData).
 /// This returns data for drawing the line/arrow that loops out from/
 /// in to `point`, the semi-circle arc connected to this line/arrow, and the
@@ -96,7 +105,7 @@ pub(crate) fn new_looped_draw_data(
 /// For ending arcs, the arc should be drawn mirrored (`mirror` set to true) for aesthetics.
 /// line_type should also be set to [`DrawLineType::Arrow`].
 fn calculate_arc(
-    (point, obb_size, dir_of_point): (Vec2, Vec2, CompassOctant),
+    (point, local_size, dir_of_point): (Vec2, Vec2, CompassOctant),
     angle_from_pi_radians: f32,
     mirror: bool,
     color: Color,
@@ -115,14 +124,7 @@ fn calculate_arc(
         color,
         line_type,
     };
-    // Ensuring the radius is some fraction of size ensures that
-    // multiple consecutive looping edges are spaced out visually when
-    // approaching near entities. Along a side, we must accommodate at most
-    // 3 drawn arcs. Since the arcs can be mirrored, we should accommodate
-    // 6 arcs per side to account for these permutations.
-    // The radius length is 1/2 the arc diameter. So, the radius must be
-    // at most 1/12 the length of a side.
-    let radius = obb_size / 12.;
+    let radius = local_size * RADIUS_LOCAL_SIZE_PROPORTION;
 
     // The mirror side's arc_angle should increase as the normal side's decreases,
     // and vice versa (as the endpoints become heavily misaligned, one arc angle
