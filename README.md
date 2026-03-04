@@ -54,7 +54,7 @@ unusual / freeform placements of buttons.
 
 | Bevy    | BANV      |
 | ------- | --------- |
-| 0.18    | 0.1 (soon)|
+| 0.18    | 0.1       |
 
 ## Limitations
 This crate has some limitations (accurate as of March 2026)
