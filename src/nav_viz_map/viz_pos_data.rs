@@ -131,8 +131,18 @@ mod tests {
 
     fn assert_eq_vec2(left: Vec2, right: Vec2) {
         let difference = left - right;
-        assert!(difference.x.abs() <= 1e-6);
-        assert!(difference.y.abs() <= 1e-6);
+        assert!(
+            difference.x.abs() <= 1e-6,
+            "left: {}\n right: {}",
+            left,
+            right
+        );
+        assert!(
+            difference.y.abs() <= 1e-6,
+            "left: {}\n right: {}",
+            left,
+            right
+        );
     }
 
     #[test]

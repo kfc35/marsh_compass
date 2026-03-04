@@ -578,7 +578,25 @@ fn get_closest_point_in_dir(
 
 #[cfg(test)]
 mod tests {
+    use std::f32::consts::FRAC_PI_2;
+
     use super::*;
+
+    fn assert_eq_vec2(left: Vec2, right: Vec2) {
+        let difference = left - right;
+        assert!(
+            difference.x.abs() <= 1e-6,
+            "left: {}\n right: {}",
+            left,
+            right
+        );
+        assert!(
+            difference.y.abs() <= 1e-6,
+            "left: {}\n right: {}",
+            left,
+            right
+        );
+    }
 
     #[test]
     fn test_local_nudge() {
@@ -708,5 +726,36 @@ mod tests {
         );
         // moves east
         assert_eq!(end_nudge, Vec2::new(7. * LOCAL_SIZE_NUDGE_PROPORTION, 0.));
+    }
+
+    #[test]
+    fn test_closest_point_in_dir() {
+        // An entity with corners at NE (8., -2.), NW(-22., -2.), SW(-22., -22.), SE(8., -22.)
+        let entity = NavVizPosData {
+            aabb_size: Vec2::new(30., 20.),
+            transformation: Isometry2d {
+                rotation: Rot2::radians(FRAC_PI_2),
+                translation: Vec2::new(-7., -12.),
+            },
+            obb_size: Vec2::new(20., 30.),
+        };
+        let point = Vec2::new(10., -4.);
+
+        let (closest, dir) = get_closest_point_in_dir(&entity, point, CompassOctant::SouthWest);
+        // Even though the NE point is closer, it is not in the SW direction of the given point.
+        // The closest point in the SE direction is the eastern point.
+        assert_eq_vec2(closest, Vec2::new(8., -12.));
+        assert_eq!(dir, CompassOctant::East);
+
+        let (closest, dir) = get_closest_point_in_dir(&entity, point, CompassOctant::West);
+        // Returns the NE point since it is in the W direction of the given point.
+        assert_eq_vec2(closest, Vec2::new(8., -2.));
+        assert_eq!(dir, CompassOctant::NorthEast);
+
+        let (closest, dir) = get_closest_point_in_dir(&entity, point, CompassOctant::East);
+        // Returns the NE point since it is the closest point. All of the points
+        // on the entity are not in the direction from the starting point.
+        assert_eq_vec2(closest, Vec2::new(8., -2.));
+        assert_eq!(dir, CompassOctant::NorthEast);
     }
 }
