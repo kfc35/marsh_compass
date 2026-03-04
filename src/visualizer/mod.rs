@@ -428,6 +428,11 @@ fn get_nav_viz_draw_data(
     }
 }
 
+/// Nudge by one sixteenth of the local size of each node.
+/// One sixteenth is very reasonable and looks good aesthetically, which, spread
+/// equally between looped edges, is an additional 1/4 of a side.
+const LOCAL_SIZE_NUDGE_PROPORTION: f32 = 1. / 16.;
+
 /// Returns a nudge to be applied to the `start` and `end` of the drawn edge
 /// in each entity's local units
 /// if `symm_edge_settings` is [`SymmetricalEdgeSettings::SpacingBetweenSingleArrows`].
@@ -442,17 +447,16 @@ pub(crate) fn get_local_nudge(
     end_dir: CompassOctant,
     symm_edge_settings: SymmetricalEdgeSettings,
 ) -> (Vec2, Vec2) {
-    // Nudge by one sixteenth of the local size of each node.
-    // Since looped edges can take up to 1/6 of a side (`calculate_arc`), with 4 looped
-    // edges max per side, there is not much room for nudging (just 1/3 of a side).
-    // One sixteenth is very reasonable and looks good aesthetically, which, spread
-    // equally between looped edges, is an additional 1/4 of a side.
     let start_nudge_units = match symm_edge_settings {
-        SymmetricalEdgeSettings::SpacingBetweenSingleArrows => from_local_size / 16.,
+        SymmetricalEdgeSettings::SpacingBetweenSingleArrows => {
+            from_local_size * LOCAL_SIZE_NUDGE_PROPORTION
+        }
         _ => Vec2::ZERO,
     };
     let end_nudge_units = match symm_edge_settings {
-        SymmetricalEdgeSettings::SpacingBetweenSingleArrows => to_local_size / 16.,
+        SymmetricalEdgeSettings::SpacingBetweenSingleArrows => {
+            to_local_size * LOCAL_SIZE_NUDGE_PROPORTION
+        }
         _ => Vec2::ZERO,
     };
     let mut start_nudge = Vec2::ZERO;
@@ -597,8 +601,11 @@ mod tests {
             SymmetricalEdgeSettings::SpacingBetweenSingleArrows,
         );
         // moves west for both
-        assert_eq!(start_nudge, Vec2::new(-30. / 16., 0.));
-        assert_eq!(end_nudge, Vec2::new(-7. / 16., 0.));
+        assert_eq!(
+            start_nudge,
+            Vec2::new(-30. * LOCAL_SIZE_NUDGE_PROPORTION, 0.)
+        );
+        assert_eq!(end_nudge, Vec2::new(-7. * LOCAL_SIZE_NUDGE_PROPORTION, 0.));
 
         let (start_nudge, end_nudge) = get_local_nudge(
             Vec2::new(30., 20.),
@@ -608,8 +615,11 @@ mod tests {
             SymmetricalEdgeSettings::SpacingBetweenSingleArrows,
         );
         // moves east for both
-        assert_eq!(start_nudge, Vec2::new(30. / 16., 0.));
-        assert_eq!(end_nudge, Vec2::new(7. / 16., 0.));
+        assert_eq!(
+            start_nudge,
+            Vec2::new(30. * LOCAL_SIZE_NUDGE_PROPORTION, 0.)
+        );
+        assert_eq!(end_nudge, Vec2::new(7. * LOCAL_SIZE_NUDGE_PROPORTION, 0.));
 
         let (start_nudge, end_nudge) = get_local_nudge(
             Vec2::new(30., 20.),
@@ -619,8 +629,11 @@ mod tests {
             SymmetricalEdgeSettings::SpacingBetweenSingleArrows,
         );
         // moves north for both
-        assert_eq!(start_nudge, Vec2::new(0., 20. / 16.));
-        assert_eq!(end_nudge, Vec2::new(0., 12. / 16.));
+        assert_eq!(
+            start_nudge,
+            Vec2::new(0., 20. * LOCAL_SIZE_NUDGE_PROPORTION)
+        );
+        assert_eq!(end_nudge, Vec2::new(0., 12. * LOCAL_SIZE_NUDGE_PROPORTION));
 
         let (start_nudge, end_nudge) = get_local_nudge(
             Vec2::new(30., 20.),
@@ -630,8 +643,11 @@ mod tests {
             SymmetricalEdgeSettings::SpacingBetweenSingleArrows,
         );
         // moves south for both
-        assert_eq!(start_nudge, Vec2::new(0., -20. / 16.));
-        assert_eq!(end_nudge, Vec2::new(0., -12. / 16.));
+        assert_eq!(
+            start_nudge,
+            Vec2::new(0., -20. * LOCAL_SIZE_NUDGE_PROPORTION)
+        );
+        assert_eq!(end_nudge, Vec2::new(0., -12. * LOCAL_SIZE_NUDGE_PROPORTION));
 
         let (start_nudge, end_nudge) = get_local_nudge(
             Vec2::new(30., 20.),
@@ -641,9 +657,12 @@ mod tests {
             SymmetricalEdgeSettings::SpacingBetweenSingleArrows,
         );
         // moves west
-        assert_eq!(start_nudge, Vec2::new(-30. / 16., 0.));
+        assert_eq!(
+            start_nudge,
+            Vec2::new(-30. * LOCAL_SIZE_NUDGE_PROPORTION, 0.)
+        );
         // moves north
-        assert_eq!(end_nudge, Vec2::new(0., 12. / 16.));
+        assert_eq!(end_nudge, Vec2::new(0., 12. * LOCAL_SIZE_NUDGE_PROPORTION));
 
         let (start_nudge, end_nudge) = get_local_nudge(
             Vec2::new(30., 20.),
@@ -653,9 +672,12 @@ mod tests {
             SymmetricalEdgeSettings::SpacingBetweenSingleArrows,
         );
         // moves east
-        assert_eq!(start_nudge, Vec2::new(30. / 16., 0.));
+        assert_eq!(
+            start_nudge,
+            Vec2::new(30. * LOCAL_SIZE_NUDGE_PROPORTION, 0.)
+        );
         // moves south
-        assert_eq!(end_nudge, Vec2::new(0., -12. / 16.));
+        assert_eq!(end_nudge, Vec2::new(0., -12. * LOCAL_SIZE_NUDGE_PROPORTION));
 
         let (start_nudge, end_nudge) = get_local_nudge(
             Vec2::new(30., 20.),
@@ -665,9 +687,12 @@ mod tests {
             SymmetricalEdgeSettings::SpacingBetweenSingleArrows,
         );
         // moves south
-        assert_eq!(start_nudge, Vec2::new(0., -20. / 16.));
+        assert_eq!(
+            start_nudge,
+            Vec2::new(0., -20. * LOCAL_SIZE_NUDGE_PROPORTION)
+        );
         // moves west
-        assert_eq!(end_nudge, Vec2::new(-7. / 16., 0.));
+        assert_eq!(end_nudge, Vec2::new(-7. * LOCAL_SIZE_NUDGE_PROPORTION, 0.));
 
         let (start_nudge, end_nudge) = get_local_nudge(
             Vec2::new(30., 20.),
@@ -677,8 +702,11 @@ mod tests {
             SymmetricalEdgeSettings::SpacingBetweenSingleArrows,
         );
         // moves north
-        assert_eq!(start_nudge, Vec2::new(0., 20. / 16.));
+        assert_eq!(
+            start_nudge,
+            Vec2::new(0., 20. * LOCAL_SIZE_NUDGE_PROPORTION)
+        );
         // moves east
-        assert_eq!(end_nudge, Vec2::new(7. / 16., 0.));
+        assert_eq!(end_nudge, Vec2::new(7. * LOCAL_SIZE_NUDGE_PROPORTION, 0.));
     }
 }
