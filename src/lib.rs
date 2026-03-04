@@ -42,6 +42,8 @@
 //!     config.draw_mode = AutoNavVizDrawMode::EnabledForCurrentFocus;
 //! }
 //! ```
+//! Refer to the [`AutoNavVizGizmoConfigGroup`] for more information on all of the settings that can
+//! be changed, or check out the `settings` example available in the repository.
 
 use bevy::gizmos::config::GizmoConfigGroup;
 use bevy::math::CompassOctant;
