@@ -19,9 +19,10 @@ fn main() {
 }
 ```
 
-Once you have set the `InputFocus` in the app to a UI entity,
-the `AutoNavVizPlugin` will draw the navigation edges that exist between
-all UI entities that have opted in to `AutoDirectionalNavigation`.
+Once you have set the `InputFocus` in the app
+to a UI entity with the `AutoDirectionalNavigation` component, the `AutoNavVizPlugin`
+will draw the navigation edges that exist with all other UI entities in the
+same render target that have also opted in to `AutoDirectionalNavigation`.
 
 ## Configuration
 The plugin can be configured via its gizmo config group `AutoNavVizGizmoConfigGroup`.
@@ -34,7 +35,7 @@ fn setup(mut config_store: ResMut<GizmoConfigStore>) {
 }
 ```
 
-Refer to the docs for [`AutoNavVizGizmoConfigGroup`](src/lib.rs) for all of
+Refer to the docs for [`AutoNavVizGizmoConfigGroup`](https://docs.rs/bevy_auto_nav_viz/latest/bevy_auto_nav_viz/struct.AutoNavVizGizmoConfigGroup.html) for all of
 the settings that can be changed. Check out the [settings](examples/settings.rs) example to see them in action.
 
 ## Examples

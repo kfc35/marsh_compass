@@ -26,12 +26,14 @@
 //! ```
 //!
 //! Once you have set the [`InputFocus`](bevy::input_focus::InputFocus) in the app
-//! to a UI entity, the [`AutoNavVizPlugin`] will draw the navigation edges that exist between
-//! all UI entities that have opted in to the
-//! [`AutoDirectionalNavigation`](bevy::ui::auto_directional_navigation::AutoDirectionalNavigation).
+//! to a UI entity with the [`AutoDirectionalNavigation`] component, the [`AutoNavVizPlugin`]
+//! will draw the navigation edges that exist with all other UI entities in the
+//! same render target that have also opted in to [`AutoDirectionalNavigation`].
 //!
 //! # Configuration
 //! The plugin can be configured via its gizmo config group [`AutoNavVizGizmoConfigGroup`].
+//!
+//! [`AutoDirectionalNavigation`]: bevy::ui::auto_directional_navigation::AutoDirectionalNavigation
 //! ```
 //! # use bevy::gizmos::config::GizmoConfigGroup;
 //! # use bevy::prelude::*;
@@ -119,7 +121,8 @@ pub enum SymmetricalEdgeSettings {
     MergeAndMix(f32),
 
     /// Draw two single ended arrows with spacing inbetween the arrows.
-    /// The spacing is automatically calculated by the length and height of the entities.
+    /// The spacing is automatically calculated using the [`AutoNavVizGizmoConfigGroup`]'s
+    /// arrow tip length ([`AutoNavVizGizmoConfigGroup::get_nudge_units`]).
     SpacingBetweenSingleArrows,
 
     /// Draw two single ended arrows that are simply drawn over each other.
